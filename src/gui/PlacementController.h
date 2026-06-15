@@ -7,12 +7,6 @@
 
 namespace synera::gui {
 
-enum class GuiPhase {
-    Prep,
-    Combat,
-    Resolve
-};
-
 struct PlacementResult {
     bool success = false;
     QString message;
@@ -22,8 +16,7 @@ class PlacementController {
 public:
     explicit PlacementController(GameState* game);
 
-    GuiPhase phase() const;
-    void setPhase(GuiPhase phase);
+    GamePhase phase() const;
     bool canDrag(UnitId id) const;
 
     PlacementResult dropOnBoard(const UnitDragData& dragData, Position target);
@@ -34,7 +27,6 @@ private:
     bool isPlayerUnit(UnitId id) const;
 
     GameState* game_;
-    GuiPhase phase_ = GuiPhase::Prep;
 };
 
 }  // namespace synera::gui

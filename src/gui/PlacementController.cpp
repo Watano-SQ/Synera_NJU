@@ -4,16 +4,12 @@ namespace synera::gui {
 
 PlacementController::PlacementController(GameState* game) : game_(game) {}
 
-GuiPhase PlacementController::phase() const {
-    return phase_;
-}
-
-void PlacementController::setPhase(GuiPhase phase) {
-    phase_ = phase;
+GamePhase PlacementController::phase() const {
+    return game_ != nullptr ? game_->phase() : GamePhase::GameOver;
 }
 
 bool PlacementController::canDrag(UnitId id) const {
-    return phase_ == GuiPhase::Prep && isPlayerUnit(id);
+    return phase() == GamePhase::Prep && isPlayerUnit(id);
 }
 
 PlacementResult PlacementController::dropOnBoard(const UnitDragData& dragData, Position target) {

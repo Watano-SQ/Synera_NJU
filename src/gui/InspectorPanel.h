@@ -18,15 +18,22 @@ public:
 
 private:
     QString traitsText(const Unit& unit) const;
+    QString itemText(const Unit& unit) const;
 
     const GameState* game_;
     std::optional<UnitId> selectedUnit_;
     QLabel* nameValue_;
+    QLabel* starValue_;
+    QLabel* equipmentValue_;
+    QLabel* archetypeValue_;
     QLabel* ownerValue_;
+    QLabel* stateValue_;
     QLabel* hpValue_;
     QLabel* atkValue_;
     QLabel* rangeValue_;
     QLabel* manaValue_;
+    QLabel* baseStatsValue_;
+    QLabel* effectiveStatsValue_;
     QLabel* traitsValue_;
     QLabel* placementValue_;
     QLabel* visualKeyValue_;

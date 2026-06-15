@@ -3,7 +3,9 @@
 #include <QApplication>
 #include <QDrag>
 #include <QDragEnterEvent>
+#include <QDragLeaveEvent>
 #include <QDropEvent>
+#include <QEvent>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
@@ -27,6 +29,7 @@ QString shortLabel(const Unit& unit, UnitId id) {
 BenchWidget::BenchWidget(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
     setAcceptDrops(true);
+    setMouseTracking(true);
     setMinimumSize(sizeHint());
 }
 
@@ -63,29 +66,51 @@ void BenchWidget::paintEvent(QPaintEvent*) {
     painter.fillRect(rect(), QColor("#f7f8fb"));
 
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
-        const QRect rect = slotRect(slot);
-        painter.fillRect(rect, QColor("#fff8df"));
-        painter.setPen(QPen(QColor("#9c8c5c"), 1));
-        painter.drawRect(rect);
+        drawCellBase(painter, slotRect(slot));
+    }
 
+    for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
+        drawGrid(painter, slotRect(slot));
+    }
+
+    for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         const auto id = game_->bench().occupant(slot);
         if (id.has_value()) {
-            drawUnit(painter, rect.adjusted(5, 5, -5, -5), *id);
+            drawUnit(painter, slotRect(slot).adjusted(5, 5, -5, -5), *id);
         }
+    }
+
+    for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
+        const auto id = game_->bench().occupant(slot);
+        if (id.has_value()) {
+            drawSelectionOverlay(painter, slotRect(slot).adjusted(5, 5, -5, -5), *id);
+        }
+    }
+
+    for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
+        drawHoverOverlay(painter, slotRect(slot), slot);
+    }
+
+    for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
+        drawDropOverlay(painter, slotRect(slot), slot);
     }
 }
 
 void BenchWidget::mousePressEvent(QMouseEvent* event) {
     pressedSlot_.reset();
+    dropTargetSlot_.reset();
     if (event->button() != Qt::LeftButton) {
+        update();
         return;
     }
 
     const auto slot = slotAt(event->pos());
+    hoverSlot_ = slot;
     if (!slot.has_value()) {
         if (unitSelectedCallback_) {
             unitSelectedCallback_(std::nullopt);
         }
+        update();
         return;
     }
 
@@ -94,6 +119,7 @@ void BenchWidget::mousePressEvent(QMouseEvent* event) {
         if (unitSelectedCallback_) {
             unitSelectedCallback_(std::nullopt);
         }
+        update();
         return;
     }
 
@@ -105,9 +131,16 @@ void BenchWidget::mousePressEvent(QMouseEvent* event) {
         pressedSlot_ = *slot;
         dragStartPosition_ = event->pos();
     }
+    update();
 }
 
 void BenchWidget::mouseMoveEvent(QMouseEvent* event) {
+    const auto currentSlot = slotAt(event->pos());
+    if (hoverSlot_ != currentSlot) {
+        hoverSlot_ = currentSlot;
+        update();
+    }
+
     if (!pressedSlot_.has_value()) {
         return;
     }
@@ -132,6 +165,8 @@ void BenchWidget::mouseMoveEvent(QMouseEvent* event) {
     drag->setMimeData(mime);
     drag->exec(Qt::MoveAction);
     pressedSlot_.reset();
+    dropTargetSlot_.reset();
+    update();
 }
 
 void BenchWidget::dragEnterEvent(QDragEnterEvent* event) {
@@ -142,14 +177,27 @@ void BenchWidget::dragEnterEvent(QDragEnterEvent* event) {
 
 void BenchWidget::dragMoveEvent(QDragMoveEvent* event) {
     if (event->mimeData()->hasFormat(kUnitDragMimeType) && slotAt(event->position().toPoint()).has_value()) {
+        dropTargetSlot_ = slotAt(event->position().toPoint());
+        update();
         event->acceptProposedAction();
+        return;
     }
+    dropTargetSlot_.reset();
+    update();
+}
+
+void BenchWidget::dragLeaveEvent(QDragLeaveEvent* event) {
+    dropTargetSlot_.reset();
+    update();
+    event->accept();
 }
 
 void BenchWidget::dropEvent(QDropEvent* event) {
     UnitDragData data;
     const auto targetSlot = slotAt(event->position().toPoint());
     if (!targetSlot.has_value() || !decodeDragData(event->mimeData()->data(kUnitDragMimeType), data)) {
+        dropTargetSlot_.reset();
+        update();
         event->ignore();
         return;
     }
@@ -157,7 +205,15 @@ void BenchWidget::dropEvent(QDropEvent* event) {
     if (benchDropCallback_) {
         benchDropCallback_(data, *targetSlot);
     }
+    dropTargetSlot_.reset();
+    update();
     event->acceptProposedAction();
+}
+
+void BenchWidget::leaveEvent(QEvent* event) {
+    hoverSlot_.reset();
+    update();
+    QWidget::leaveEvent(event);
 }
 
 std::optional<int> BenchWidget::slotAt(const QPoint& point) const {
@@ -173,9 +229,25 @@ QRect BenchWidget::slotRect(int slot) const {
     return QRect(kMargin + slot * (kSlotSize + kGap), kMargin, kSlotSize, kSlotSize);
 }
 
+void BenchWidget::drawCellBase(QPainter& painter, const QRect& rect) const {
+    painter.save();
+    painter.fillRect(rect, QColor("#fff8df"));
+    painter.restore();
+}
+
+void BenchWidget::drawGrid(QPainter& painter, const QRect& rect) const {
+    painter.save();
+    painter.setPen(QPen(QColor("#9c8c5c"), 1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(rect);
+    painter.restore();
+}
+
 void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) const {
+    painter.save();
     const Unit* unit = game_->unit(id);
     if (unit == nullptr) {
+        painter.restore();
         return;
     }
 
@@ -190,20 +262,51 @@ void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
         painter.drawText(rect.adjusted(4, 4, -4, -16), Qt::AlignCenter, shortLabel(*unit, id));
     }
 
-    const int hpWidth = std::max(1, rect.width() * unit->hp() / std::max(1, unit->maxHp()));
-    const int manaWidth = std::max(1, rect.width() * unit->mana() / std::max(1, unit->maxMana()));
+    painter.restore();
+    drawHpManaBars(painter, rect, *unit);
+}
+
+void BenchWidget::drawHpManaBars(QPainter& painter, const QRect& rect, const Unit& unit) const {
+    painter.save();
+    const int hpWidth = std::max(1, rect.width() * unit.hp() / std::max(1, unit.maxHp()));
+    const int manaWidth = std::max(1, rect.width() * unit.mana() / std::max(1, unit.maxMana()));
     const QRect hpBack(rect.left(), rect.bottom() - 10, rect.width(), 4);
     const QRect manaBack(rect.left(), rect.bottom() - 5, rect.width(), 4);
     painter.fillRect(hpBack, QColor("#d9dde5"));
     painter.fillRect(QRect(hpBack.left(), hpBack.top(), hpWidth, hpBack.height()), QColor("#30a46c"));
     painter.fillRect(manaBack, QColor("#d9dde5"));
     painter.fillRect(QRect(manaBack.left(), manaBack.top(), manaWidth, manaBack.height()), QColor("#2f81f7"));
+    painter.restore();
+}
 
+void BenchWidget::drawSelectionOverlay(QPainter& painter, const QRect& rect, UnitId id) const {
+    painter.save();
     if (selectedUnit_.has_value() && *selectedUnit_ == id) {
         painter.setPen(QPen(QColor("#ffb000"), 3));
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(rect.adjusted(0, 0, -1, -1));
     }
+    painter.restore();
+}
+
+void BenchWidget::drawHoverOverlay(QPainter& painter, const QRect& rect, int slot) const {
+    painter.save();
+    if (hoverSlot_.has_value() && *hoverSlot_ == slot) {
+        painter.setPen(QPen(QColor(40, 40, 40, 90), 2));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(rect.adjusted(2, 2, -2, -2));
+    }
+    painter.restore();
+}
+
+void BenchWidget::drawDropOverlay(QPainter& painter, const QRect& rect, int slot) const {
+    painter.save();
+    if (dropTargetSlot_.has_value() && *dropTargetSlot_ == slot) {
+        painter.setPen(QPen(QColor(34, 139, 230, 190), 3, Qt::DashLine));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(rect.adjusted(3, 3, -3, -3));
+    }
+    painter.restore();
 }
 
 bool BenchWidget::canStartDrag(UnitId id) const {

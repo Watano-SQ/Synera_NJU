@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace synera {
 
 using UnitId = std::uint64_t;
+using ItemId = std::uint64_t;
 
 enum class Owner {
     PlayerCtrl,
@@ -22,6 +24,25 @@ enum class UnitState {
     Dead
 };
 
+enum class GamePhase {
+    Prep,
+    Combat,
+    Resolve,
+    GameOver
+};
+
+enum class RoundResult {
+    None,
+    PlayerVictory,
+    PlayerDefeat
+};
+
+enum class MatchResult {
+    Ongoing,
+    PlayerVictory,
+    PlayerDefeat
+};
+
 enum class PlacementKind {
     None,
     BenchSlot,
@@ -31,6 +52,13 @@ enum class PlacementKind {
 enum class PlacementPolicy {
     Reject,
     Swap
+};
+
+enum class ItemEffectType {
+    Attack,
+    MaxHp,
+    MaxMana,
+    AttackIntervalPercent
 };
 
 struct Position {
@@ -44,6 +72,67 @@ struct Position {
     bool operator!=(const Position& other) const {
         return !(*this == other);
     }
+};
+
+struct ActionResult {
+    bool success = false;
+    std::string message;
+};
+
+struct UnitStats {
+    int maxHp = 1;
+    int atk = 1;
+    int range = 1;
+    int maxMana = 60;
+    int attackInterval = 60;
+    int moveInterval = 20;
+};
+
+struct UnitDefinition {
+    std::string definitionId;
+    std::string name;
+    int cost = 1;
+    std::vector<std::string> traits;
+    UnitStats baseStats;
+    std::string factoryKey;
+    std::string visualKey;
+};
+
+struct ShopOffer {
+    std::string definitionId;
+    int cost = 0;
+};
+
+struct ItemDefinition {
+    std::string itemDefId;
+    std::string name;
+    ItemEffectType effectType = ItemEffectType::Attack;
+    int value = 0;
+};
+
+struct ItemInstance {
+    ItemId itemId = 0;
+    std::string itemDefId;
+};
+
+struct SynergyStatus {
+    std::string trait;
+    int count = 0;
+    int activeThreshold = 0;
+    int nextThreshold = 0;
+    bool active = false;
+    std::string effectDescription;
+};
+
+struct CombatConfig {
+    int attackInterval = 60;
+    int moveInterval = 20;
+    int manaPerAttack = 10;
+    int victoryGold = 5;
+    int defeatGold = 2;
+    int defeatHpLoss = 10;
+    int maxRound = 3;
+    int itemDropPercent = 35;
 };
 
 struct Placement {
@@ -72,7 +161,12 @@ struct Placement {
 
 std::string toString(Owner owner);
 std::string toString(UnitState state);
+std::string toString(GamePhase phase);
+std::string toString(RoundResult result);
+std::string toString(MatchResult result);
+std::string toString(ItemEffectType effectType);
 std::string toString(const Position& position);
 std::string toString(const Placement& placement);
+std::string toString(const UnitStats& stats);
 
 }  // namespace synera

@@ -3,12 +3,17 @@
 #include "AssetManager.h"
 #include "BenchWidget.h"
 #include "BoardWidget.h"
+#include "EquipmentPanel.h"
 #include "InspectorPanel.h"
 #include "PlacementController.h"
+#include "ShopPanel.h"
+#include "SynergyPanel.h"
 #include "core/GameState.h"
 
 #include <QLabel>
 #include <QMainWindow>
+#include <QPushButton>
+#include <QTimer>
 
 #include <optional>
 
@@ -24,6 +29,16 @@ private:
     void initializeGame();
     void setSelectedUnit(std::optional<UnitId> unitId);
     void applyPlacementResult(const PlacementResult& result);
+    void purchaseShopSlot(std::size_t index);
+    void refreshShop();
+    void upgradePopulation();
+    void setSelectedItem(std::optional<ItemId> itemId);
+    bool tryEquipSelectedItem(UnitId unitId);
+    void saveGame();
+    void loadGame();
+    void startCombat();
+    void advanceCombat();
+    void resolveRound();
     QString phaseText() const;
 
     GameState game_;
@@ -32,9 +47,19 @@ private:
     BoardWidget* boardWidget_ = nullptr;
     BenchWidget* benchWidget_ = nullptr;
     InspectorPanel* inspectorPanel_ = nullptr;
+    ShopPanel* shopPanel_ = nullptr;
+    EquipmentPanel* equipmentPanel_ = nullptr;
+    SynergyPanel* synergyPanel_ = nullptr;
     QLabel* playerStatusLabel_ = nullptr;
     QLabel* phaseLabel_ = nullptr;
+    QPushButton* upgradeButton_ = nullptr;
+    QPushButton* saveButton_ = nullptr;
+    QPushButton* loadButton_ = nullptr;
+    QPushButton* startCombatButton_ = nullptr;
+    QPushButton* resolveButton_ = nullptr;
+    QTimer* combatTimer_ = nullptr;
     std::optional<UnitId> selectedUnit_;
+    std::optional<ItemId> selectedItem_;
 };
 
 }  // namespace synera::gui

@@ -1,5 +1,6 @@
 #include "InspectorPanel.h"
 
+#include "core/Catalog.h"
 #include "core/Types.h"
 
 #include <QFormLayout>
@@ -19,25 +20,40 @@ InspectorPanel::InspectorPanel(const GameState* game, QWidget* parent) : QWidget
 
     auto* form = new QFormLayout();
     nameValue_ = new QLabel("-", this);
+    starValue_ = new QLabel("-", this);
+    equipmentValue_ = new QLabel("-", this);
+    archetypeValue_ = new QLabel("-", this);
     ownerValue_ = new QLabel("-", this);
+    stateValue_ = new QLabel("-", this);
     hpValue_ = new QLabel("-", this);
     atkValue_ = new QLabel("-", this);
     rangeValue_ = new QLabel("-", this);
     manaValue_ = new QLabel("-", this);
+    baseStatsValue_ = new QLabel("-", this);
+    effectiveStatsValue_ = new QLabel("-", this);
     traitsValue_ = new QLabel("-", this);
     placementValue_ = new QLabel("-", this);
     visualKeyValue_ = new QLabel("-", this);
 
     traitsValue_->setWordWrap(true);
+    baseStatsValue_->setWordWrap(true);
+    effectiveStatsValue_->setWordWrap(true);
+    equipmentValue_->setWordWrap(true);
     placementValue_->setWordWrap(true);
     visualKeyValue_->setWordWrap(true);
 
     form->addRow("Name", nameValue_);
+    form->addRow("Star", starValue_);
+    form->addRow("Equipment", equipmentValue_);
+    form->addRow("Archetype", archetypeValue_);
     form->addRow("Owner", ownerValue_);
+    form->addRow("State", stateValue_);
     form->addRow("HP", hpValue_);
     form->addRow("ATK", atkValue_);
     form->addRow("Range", rangeValue_);
     form->addRow("Mana", manaValue_);
+    form->addRow("Base Stats", baseStatsValue_);
+    form->addRow("Effective Stats", effectiveStatsValue_);
     form->addRow("Traits", traitsValue_);
     form->addRow("Placement", placementValue_);
     form->addRow("Visual Key", visualKeyValue_);
@@ -55,11 +71,17 @@ void InspectorPanel::refreshFromState() {
     const Unit* unit = selectedUnit_.has_value() ? game_->unit(*selectedUnit_) : nullptr;
     if (unit == nullptr) {
         nameValue_->setText("-");
+        starValue_->setText("-");
+        equipmentValue_->setText("-");
+        archetypeValue_->setText("-");
         ownerValue_->setText("-");
+        stateValue_->setText("-");
         hpValue_->setText("-");
         atkValue_->setText("-");
         rangeValue_->setText("-");
         manaValue_->setText("-");
+        baseStatsValue_->setText("-");
+        effectiveStatsValue_->setText("-");
         traitsValue_->setText("-");
         placementValue_->setText("-");
         visualKeyValue_->setText("-");
@@ -67,11 +89,17 @@ void InspectorPanel::refreshFromState() {
     }
 
     nameValue_->setText(QString::fromStdString(unit->name()));
+    starValue_->setText(QString::number(unit->star()));
+    equipmentValue_->setText(itemText(*unit));
+    archetypeValue_->setText(QString::fromStdString(unit->archetype()));
     ownerValue_->setText(QString::fromStdString(toString(unit->owner())));
+    stateValue_->setText(QString::fromStdString(toString(unit->state())));
     hpValue_->setText(QString("%1 / %2").arg(unit->hp()).arg(unit->maxHp()));
     atkValue_->setText(QString::number(unit->atk()));
     rangeValue_->setText(QString::number(unit->range()));
     manaValue_->setText(QString("%1 / %2").arg(unit->mana()).arg(unit->maxMana()));
+    baseStatsValue_->setText(QString::fromStdString(toString(unit->baseStats())));
+    effectiveStatsValue_->setText(QString::fromStdString(toString(unit->effectiveStats())));
     traitsValue_->setText(traitsText(*unit));
     placementValue_->setText(QString::fromStdString(toString(unit->placement())));
     visualKeyValue_->setText(QString::fromStdString(unit->visualKey()));
@@ -83,6 +111,22 @@ QString InspectorPanel::traitsText(const Unit& unit) const {
         parts << QString::fromStdString(trait);
     }
     return parts.isEmpty() ? "-" : parts.join(", ");
+}
+
+QString InspectorPanel::itemText(const Unit& unit) const {
+    if (!unit.equippedItemId().has_value()) {
+        return "-";
+    }
+    const ItemId itemId = *unit.equippedItemId();
+    const auto instance = game_->item(itemId);
+    if (!instance.has_value()) {
+        return QString("#%1").arg(itemId);
+    }
+    const ItemDefinition* definition = findItemDefinition(instance->itemDefId);
+    if (definition == nullptr) {
+        return QString("#%1 %2").arg(itemId).arg(QString::fromStdString(instance->itemDefId));
+    }
+    return QString("#%1 %2").arg(itemId).arg(QString::fromStdString(definition->name));
 }
 
 }  // namespace synera::gui

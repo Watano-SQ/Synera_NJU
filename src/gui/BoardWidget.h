@@ -34,18 +34,28 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
+    void dragLeaveEvent(QDragLeaveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     std::optional<Position> cellAt(const QPoint& point) const;
     QRect cellRect(Position position) const;
+    void drawCellBase(QPainter& painter, Position position, const QRect& rect) const;
+    void drawGrid(QPainter& painter, const QRect& rect) const;
     void drawUnit(QPainter& painter, const QRect& rect, UnitId id) const;
+    void drawHpManaBars(QPainter& painter, const QRect& rect, const Unit& unit) const;
+    void drawSelectionOverlay(QPainter& painter, const QRect& rect, UnitId id) const;
+    void drawHoverOverlay(QPainter& painter, const QRect& rect, Position position) const;
+    void drawDropOverlay(QPainter& painter, const QRect& rect, Position position) const;
     bool canStartDrag(UnitId id) const;
 
     const GameState* game_;
     AssetManager* assets_;
     bool dragEnabled_ = true;
     std::optional<UnitId> selectedUnit_;
+    std::optional<Position> hoverCell_;
+    std::optional<Position> dropTargetCell_;
     std::optional<Position> pressedCell_;
     QPoint dragStartPosition_;
     UnitSelectedCallback unitSelectedCallback_;

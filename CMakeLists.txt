@@ -15,9 +15,11 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 add_library(synera_core STATIC
     src/core/Bench.cpp
     src/core/Board.cpp
+    src/core/Catalog.cpp
     src/core/EncounterGenerator.cpp
     src/core/GameState.cpp
     src/core/Player.cpp
+    src/core/SkillContext.cpp
     src/core/Types.cpp
     src/core/Unit.cpp
     src/core/UnitManager.cpp
@@ -31,14 +33,23 @@ target_link_libraries(synera_cli PRIVATE synera_core)
 add_executable(stage1_tests tests/test_stage1.cpp)
 target_link_libraries(stage1_tests PRIVATE synera_core)
 
+add_executable(stage2_tests tests/test_stage2.cpp)
+target_link_libraries(stage2_tests PRIVATE synera_core)
+
+add_executable(stage3_tests tests/test_stage3.cpp)
+target_link_libraries(stage3_tests PRIVATE synera_core)
+
 add_executable(synera_gui
     src/gui/AssetManager.cpp
     src/gui/BenchWidget.cpp
     src/gui/BoardWidget.cpp
     src/gui/DragData.cpp
+    src/gui/EquipmentPanel.cpp
     src/gui/InspectorPanel.cpp
     src/gui/MainWindow.cpp
     src/gui/PlacementController.cpp
+    src/gui/ShopPanel.cpp
+    src/gui/SynergyPanel.cpp
     src/gui/main_gui.cpp
 )
 target_link_libraries(synera_gui PRIVATE synera_core Qt6::Widgets)
