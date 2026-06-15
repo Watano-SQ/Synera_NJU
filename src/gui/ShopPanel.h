@@ -12,6 +12,7 @@
 namespace synera::gui {
 
 class AssetManager;
+class ShopCardButton;
 
 class ShopPanel : public QWidget {
 public:
@@ -27,9 +28,8 @@ public:
 private:
     const GameState* game_;
     AssetManager* assets_;
-    std::array<QLabel*, 5> offerIcons_{};
-    std::array<QLabel*, 5> offerLabels_{};
-    std::array<QPushButton*, 5> purchaseButtons_{};
+    QLabel* titleArt_ = nullptr;
+    std::array<ShopCardButton*, 5> offerCards_{};
     QPushButton* refreshButton_ = nullptr;
     PurchaseCallback purchaseCallback_;
     RefreshCallback refreshCallback_;

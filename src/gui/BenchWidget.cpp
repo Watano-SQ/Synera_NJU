@@ -1,5 +1,7 @@
 #include "BenchWidget.h"
 
+#include "core/Catalog.h"
+
 #include <QApplication>
 #include <QDrag>
 #include <QDragEnterEvent>
@@ -63,7 +65,7 @@ void BenchWidget::refreshFromState() {
 void BenchWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor("#f7f8fb"));
+    painter.fillRect(rect(), QColor("#5f8f3f"));
 
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         drawCellBase(painter, slotRect(slot));
@@ -231,15 +233,23 @@ QRect BenchWidget::slotRect(int slot) const {
 
 void BenchWidget::drawCellBase(QPainter& painter, const QRect& rect) const {
     painter.save();
-    painter.fillRect(rect, QColor("#fff8df"));
+    const QPixmap* frame = assets_ != nullptr ? assets_->pixmapFor("ui/button") : nullptr;
+    if (frame != nullptr) {
+        painter.drawPixmap(rect, *frame);
+        painter.fillRect(rect.adjusted(8, 8, -8, -8), QColor(96, 143, 63, 120));
+    } else {
+        painter.setPen(QPen(QColor("#5f7f2f"), 2));
+        painter.setBrush(QColor("#d7e7a4"));
+        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 7, 7);
+    }
     painter.restore();
 }
 
 void BenchWidget::drawGrid(QPainter& painter, const QRect& rect) const {
     painter.save();
-    painter.setPen(QPen(QColor("#9c8c5c"), 1));
+    painter.setPen(QPen(QColor("#3e5f28"), 1));
     painter.setBrush(Qt::NoBrush);
-    painter.drawRect(rect);
+    painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 6, 6);
     painter.restore();
 }
 
@@ -251,7 +261,7 @@ void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
         return;
     }
 
-    const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(unit->visualKey()) : nullptr;
+    const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(displayVisualKey(*unit)) : nullptr;
     if (pixmap != nullptr) {
         painter.drawPixmap(rect.adjusted(2, 2, -2, -12), *pixmap);
     } else {

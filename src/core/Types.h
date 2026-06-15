@@ -54,6 +54,11 @@ enum class PlacementPolicy {
     Swap
 };
 
+enum class BoardHalf {
+    Enemy,
+    Player
+};
+
 enum class ItemEffectType {
     Attack,
     MaxHp,
@@ -96,6 +101,8 @@ struct UnitDefinition {
     UnitStats baseStats;
     std::string factoryKey;
     std::string visualKey;
+    std::string star1VisualKey;
+    std::string star2VisualKey;
 };
 
 struct ShopOffer {

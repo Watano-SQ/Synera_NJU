@@ -102,7 +102,7 @@ void InspectorPanel::refreshFromState() {
     effectiveStatsValue_->setText(QString::fromStdString(toString(unit->effectiveStats())));
     traitsValue_->setText(traitsText(*unit));
     placementValue_->setText(QString::fromStdString(toString(unit->placement())));
-    visualKeyValue_->setText(QString::fromStdString(unit->visualKey()));
+    visualKeyValue_->setText(QString::fromStdString(displayVisualKey(*unit)));
 }
 
 QString InspectorPanel::traitsText(const Unit& unit) const {

@@ -50,7 +50,15 @@ private:
     ShopPanel* shopPanel_ = nullptr;
     EquipmentPanel* equipmentPanel_ = nullptr;
     SynergyPanel* synergyPanel_ = nullptr;
-    QLabel* playerStatusLabel_ = nullptr;
+    QLabel* brainIconLabel_ = nullptr;
+    QLabel* hpValueLabel_ = nullptr;
+    QLabel* sunIconLabel_ = nullptr;
+    QLabel* sunValueLabel_ = nullptr;
+    QLabel* flagEmptyLabel_ = nullptr;
+    QLabel* flagFullLabel_ = nullptr;
+    QLabel* roundValueLabel_ = nullptr;
+    QLabel* levelValueLabel_ = nullptr;
+    QLabel* populationValueLabel_ = nullptr;
     QLabel* phaseLabel_ = nullptr;
     QPushButton* upgradeButton_ = nullptr;
     QPushButton* saveButton_ = nullptr;

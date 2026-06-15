@@ -10,6 +10,7 @@ PICTURES = ROOT / "pictures"
 ASSETS = ROOT / "assets"
 
 
+# Unit visuals include base plants and star-up looks. This is not the shop unit pool.
 UNIT_ASSETS = {
     "豌豆射手.gif": "units/peashooter.png",
     "双重射手.gif": "units/repeater.png",
@@ -18,6 +19,7 @@ UNIT_ASSETS = {
     "坚果.gif": "units/wallnut.png",
     "高坚果.gif": "units/tallnut.png",
     "PuffShroom.gif": "units/puffshroom.png",
+    "ScaredyShroom.gif": "units/scaredyshroom.png",
     "FumeShroom.gif": "units/fumeshroom.png",
     "GloomShroom.gif": "units/gloomshroom.png",
     "Spikeweed.gif": "units/spikeweed.png",
@@ -47,6 +49,7 @@ UI_ASSETS = {
     "脑子.png": "ui/brain.png",
     "FlagMeterEmpty.png": "ui/flag_meter_empty.png",
     "FlagMeterFull.png": "ui/flag_meter_full.png",
+    "Zombieline.jpg": "ui/zombieline.jpg",
 }
 
 BACKGROUND_ASSETS = {
@@ -54,12 +57,22 @@ BACKGROUND_ASSETS = {
     "晚上.jpg": "backgrounds/night_board.jpg",
 }
 
+# Shop cards are seed-packet art for purchasable base plants only.
+SHOP_CARD_ASSETS = {
+    "peashooter": "Peashooter.png",
+    "sunflower": "SunFlower.png",
+    "wallnut": "HugeWallNut.png",
+    "puffshroom": "PuffShroom.png",
+    "fumeshroom": "FumeShroom.png",
+    "spikeweed": "Spikeweed.png",
+}
+
 TRAIT_BADGES = {
     "shooter": ("射", "#7fbf3f", "#18380d"),
     "nut": ("坚", "#b98b42", "#3f260a"),
     "sun": ("阳", "#ffd34e", "#5c3b00"),
     "healer": ("愈", "#f78fb3", "#51152a"),
-    "fungus": ("菌", "#8e63ce", "#24133f"),
+    "fungus": ("菇", "#8e63ce", "#24133f"),
     "spike": ("刺", "#86a34a", "#1f2b10"),
 }
 
@@ -122,7 +135,11 @@ def save_ui(source: str, output: str) -> None:
         raise FileNotFoundError(f"Missing input asset: {input_path}")
 
     image = load_first_frame(input_path)
-    image.save(ensure_parent(output))
+    output_path = ensure_parent(output)
+    if output_path.suffix.lower() in {".jpg", ".jpeg"}:
+        image.convert("RGB").save(output_path, quality=92)
+    else:
+        image.save(output_path)
 
 
 def save_background(source: str, output: str, size: tuple[int, int] = (640, 640)) -> None:
@@ -134,6 +151,19 @@ def save_background(source: str, output: str, size: tuple[int, int] = (640, 640)
         rgb = image.convert("RGB")
         cropped = ImageOps.fit(rgb, size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
         cropped.save(ensure_parent(output), quality=92)
+
+
+def save_shop_card(definition_id: str, source: str) -> None:
+    input_path = PICTURES / source
+    if not input_path.exists():
+        raise FileNotFoundError(f"Missing input asset: {input_path}")
+
+    image = load_first_frame(input_path)
+    midpoint = image.height // 2
+    available = image.crop((0, 0, image.width, midpoint))
+    disabled = image.crop((0, midpoint, image.width, image.height))
+    available.save(ensure_parent(f"shop_cards/{definition_id}_available.png"))
+    disabled.save(ensure_parent(f"shop_cards/{definition_id}_disabled.png"))
 
 
 def load_font(size: int) -> ImageFont.ImageFont:
@@ -164,7 +194,7 @@ def save_trait_badge(trait_id: str, text: str, fill: str, ink: str) -> None:
 
 
 def main() -> None:
-    for folder in ["units", "enemies", "items", "traits", "ui", "backgrounds"]:
+    for folder in ["units", "enemies", "items", "traits", "ui", "backgrounds", "shop_cards"]:
         (ASSETS / folder).mkdir(parents=True, exist_ok=True)
 
     for source, output in UNIT_ASSETS.items():
@@ -177,6 +207,8 @@ def main() -> None:
         save_ui(source, output)
     for source, output in BACKGROUND_ASSETS.items():
         save_background(source, output)
+    for definition_id, source in SHOP_CARD_ASSETS.items():
+        save_shop_card(definition_id, source)
     for trait_id, (text, fill, ink) in TRAIT_BADGES.items():
         save_trait_badge(trait_id, text, fill, ink)
 

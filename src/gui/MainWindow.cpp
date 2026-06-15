@@ -5,6 +5,8 @@
 
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QPixmap>
+#include <QSize>
 #include <QStatusBar>
 #include <QVBoxLayout>
 
@@ -16,6 +18,15 @@ namespace {
 std::unique_ptr<Unit> makeCatalogUnit(const std::string& definitionId) {
     const UnitDefinition* definition = findUnitDefinition(definitionId);
     return definition != nullptr ? createUnitFromDefinition(*definition, Owner::PlayerCtrl) : nullptr;
+}
+
+void setStatusIcon(QLabel* label, AssetManager& assets, const std::string& visualKey, QSize size) {
+    const QPixmap* pixmap = assets.pixmapFor(visualKey);
+    if (pixmap != nullptr) {
+        label->setPixmap(pixmap->scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        label->setFixedSize(size);
+        label->setAlignment(Qt::AlignCenter);
+    }
 }
 
 }  // namespace
@@ -30,14 +41,38 @@ MainWindow::MainWindow(QWidget* parent)
     auto* root = new QVBoxLayout(central);
 
     auto* statusRow = new QHBoxLayout();
-    playerStatusLabel_ = new QLabel(this);
+    brainIconLabel_ = new QLabel(this);
+    hpValueLabel_ = new QLabel(this);
+    sunIconLabel_ = new QLabel(this);
+    sunValueLabel_ = new QLabel(this);
+    flagEmptyLabel_ = new QLabel(this);
+    flagFullLabel_ = new QLabel(this);
+    roundValueLabel_ = new QLabel(this);
+    levelValueLabel_ = new QLabel(this);
+    populationValueLabel_ = new QLabel(this);
     phaseLabel_ = new QLabel(this);
     upgradeButton_ = new QPushButton("升级人口", this);
     saveButton_ = new QPushButton("存档", this);
     loadButton_ = new QPushButton("读档", this);
     startCombatButton_ = new QPushButton("开始守家", this);
     resolveButton_ = new QPushButton("结算", this);
-    statusRow->addWidget(playerStatusLabel_);
+
+    setStatusIcon(brainIconLabel_, assets_, "ui/brain", QSize(28, 28));
+    setStatusIcon(sunIconLabel_, assets_, "ui/sun_counter", QSize(30, 30));
+    setStatusIcon(flagEmptyLabel_, assets_, "ui/flag_meter_empty", QSize(52, 22));
+    setStatusIcon(flagFullLabel_, assets_, "ui/flag_meter_full", QSize(52, 22));
+    statusRow->addWidget(brainIconLabel_);
+    statusRow->addWidget(hpValueLabel_);
+    statusRow->addSpacing(8);
+    statusRow->addWidget(sunIconLabel_);
+    statusRow->addWidget(sunValueLabel_);
+    statusRow->addSpacing(8);
+    statusRow->addWidget(flagEmptyLabel_);
+    statusRow->addWidget(flagFullLabel_);
+    statusRow->addWidget(roundValueLabel_);
+    statusRow->addSpacing(8);
+    statusRow->addWidget(levelValueLabel_);
+    statusRow->addWidget(populationValueLabel_);
     statusRow->addStretch();
     statusRow->addWidget(phaseLabel_);
     statusRow->addWidget(upgradeButton_);
@@ -100,15 +135,12 @@ void MainWindow::refreshFromState() {
         selectedUnit_.reset();
     }
 
-    playerStatusLabel_->setText(
-        QString("脑子 %1  阳光 %2  等级 %3  人口 %4/%5  波次 %6  战局 %7")
-            .arg(game_.player().hp())
-            .arg(game_.player().gold())
-            .arg(game_.player().level())
-            .arg(game_.deployedPlayerUnitCount())
-            .arg(game_.player().unitCap())
-            .arg(game_.player().currentRound())
-            .arg(QString::fromStdString(toString(game_.matchResult()))));
+    hpValueLabel_->setText(QString::number(game_.player().hp()));
+    sunValueLabel_->setText(QString::number(game_.player().gold()));
+    roundValueLabel_->setText(QString("波次 %1").arg(game_.player().currentRound()));
+    levelValueLabel_->setText(QString("等级 %1").arg(game_.player().level()));
+    populationValueLabel_->setText(
+        QString("人口 %1/%2").arg(game_.deployedPlayerUnitCount()).arg(game_.player().unitCap()));
     phaseLabel_->setText("阶段: " + phaseText());
 
     const bool canDrag = game_.phase() == GamePhase::Prep;

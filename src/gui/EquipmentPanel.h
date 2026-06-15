@@ -13,6 +13,7 @@
 namespace synera::gui {
 
 class AssetManager;
+class EquipmentTrayWidget;
 
 class EquipmentPanel : public QWidget {
 public:
@@ -28,6 +29,7 @@ private:
     const GameState* game_;
     AssetManager* assets_;
     std::optional<ItemId> selectedItem_;
+    EquipmentTrayWidget* trayWidget_ = nullptr;
     QVBoxLayout* itemLayout_ = nullptr;
     QLabel* emptyLabel_ = nullptr;
     ItemSelectedCallback itemSelectedCallback_;

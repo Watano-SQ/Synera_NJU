@@ -1,6 +1,7 @@
 #include "Catalog.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace synera {
 
@@ -12,7 +13,8 @@ UnitDefinition makeDefinition(std::string definitionId,
                               std::vector<std::string> traits,
                               UnitStats stats,
                               std::string factoryKey,
-                              std::string visualKey) {
+                              std::string star1VisualKey,
+                              std::string star2VisualKey) {
     UnitDefinition definition;
     definition.definitionId = std::move(definitionId);
     definition.name = std::move(name);
@@ -20,7 +22,9 @@ UnitDefinition makeDefinition(std::string definitionId,
     definition.traits = std::move(traits);
     definition.baseStats = stats;
     definition.factoryKey = std::move(factoryKey);
-    definition.visualKey = std::move(visualKey);
+    definition.visualKey = star1VisualKey;
+    definition.star1VisualKey = std::move(star1VisualKey);
+    definition.star2VisualKey = std::move(star2VisualKey);
     return definition;
 }
 
@@ -34,13 +38,7 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        {"shooter"},
                        UnitStats{300, 32, 3, 60, 60, 20},
                        "BasicUnit",
-                       "units/peashooter"),
-        makeDefinition("repeater",
-                       "双重射手",
-                       3,
-                       {"shooter"},
-                       UnitStats{320, 36, 3, 60, 56, 20},
-                       "PeaBurst",
+                       "units/peashooter",
                        "units/repeater"),
         makeDefinition("sunflower",
                        "向日葵",
@@ -48,13 +46,7 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        {"sun", "healer"},
                        UnitStats{260, 22, 2, 60, 64, 20},
                        "SunHealer",
-                       "units/sunflower"),
-        makeDefinition("twin_sunflower",
-                       "双胞向日葵",
-                       3,
-                       {"sun", "healer"},
-                       UnitStats{300, 26, 2, 55, 62, 20},
-                       "SunHealer",
+                       "units/sunflower",
                        "units/twin_sunflower"),
         makeDefinition("wallnut",
                        "坚果墙",
@@ -62,13 +54,7 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        {"nut"},
                        UnitStats{520, 18, 1, 70, 70, 20},
                        "BasicUnit",
-                       "units/wallnut"),
-        makeDefinition("tallnut",
-                       "高坚果",
-                       3,
-                       {"nut"},
-                       UnitStats{700, 20, 1, 80, 72, 20},
-                       "BasicUnit",
+                       "units/wallnut",
                        "units/tallnut"),
         makeDefinition("puffshroom",
                        "小喷菇",
@@ -76,20 +62,15 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        {"fungus"},
                        UnitStats{220, 24, 2, 45, 48, 20},
                        "BasicUnit",
-                       "units/puffshroom"),
+                       "units/puffshroom",
+                       "units/scaredyshroom"),
         makeDefinition("fumeshroom",
                        "大喷菇",
                        2,
                        {"fungus", "shooter"},
                        UnitStats{320, 30, 2, 60, 60, 20},
                        "FumeLineCaster",
-                       "units/fumeshroom"),
-        makeDefinition("gloomshroom",
-                       "忧郁菇",
-                       3,
-                       {"fungus"},
-                       UnitStats{380, 34, 2, 65, 58, 20},
-                       "FumeLineCaster",
+                       "units/fumeshroom",
                        "units/gloomshroom"),
         makeDefinition("spikeweed",
                        "地刺",
@@ -97,13 +78,7 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        {"spike"},
                        UnitStats{300, 34, 1, 60, 50, 20},
                        "BasicUnit",
-                       "units/spikeweed"),
-        makeDefinition("spikerock",
-                       "地刺王",
-                       3,
-                       {"spike", "nut"},
-                       UnitStats{430, 38, 1, 60, 52, 20},
-                       "BasicUnit",
+                       "units/spikeweed",
                        "units/spikerock"),
     };
     return definitions;
@@ -115,6 +90,31 @@ const UnitDefinition* findUnitDefinition(const std::string& definitionId) {
         return definition.definitionId == definitionId;
     });
     return it == definitions.end() ? nullptr : &*it;
+}
+
+std::string displayVisualKey(const Unit& unit) {
+    if (unit.owner() == Owner::EnemyCtrl) {
+        return unit.visualKey();
+    }
+
+    const UnitDefinition* definition = findUnitDefinition(unit.definitionId());
+    if (definition == nullptr) {
+        return unit.visualKey();
+    }
+    if (unit.star() == 2 && !definition->star2VisualKey.empty()) {
+        return definition->star2VisualKey;
+    }
+    if (!definition->star1VisualKey.empty()) {
+        return definition->star1VisualKey;
+    }
+    if (!definition->visualKey.empty()) {
+        return definition->visualKey;
+    }
+    return unit.visualKey();
+}
+
+std::string boardHalfBackgroundVisualKey(BoardHalf half) {
+    return half == BoardHalf::Enemy ? "backgrounds/night_board" : "backgrounds/day_board";
 }
 
 std::unique_ptr<Unit> createUnitFromDefinition(const UnitDefinition& definition, Owner owner) {
@@ -177,7 +177,7 @@ const std::vector<TraitDefinition>& traitCatalog() {
         TraitDefinition{"shooter", "射手", "traits/shooter", "射手植物提高攻击频率。"},
         TraitDefinition{"nut", "坚果", "traits/nut", "坚果单位获得额外生命值。"},
         TraitDefinition{"sun", "阳光", "traits/sun", "胜利结算时获得额外阳光。"},
-        TraitDefinition{"healer", "治愈", "traits/healer", "治疗效果提高。"},
+        TraitDefinition{"healer", "治疗", "traits/healer", "治疗效果提高。"},
         TraitDefinition{"fungus", "真菌", "traits/fungus", "真菌单位更快释放技能。"},
         TraitDefinition{"spike", "地刺", "traits/spike", "地刺单位获得攻击力。"},
     };
