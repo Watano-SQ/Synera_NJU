@@ -12,6 +12,16 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
+if(WIN32)
+    find_program(WINDEPLOYQT_EXECUTABLE
+        NAMES windeployqt
+        HINTS
+            "${Qt6_DIR}/../../../bin"
+            "${Qt6Widgets_DIR}/../../../bin"
+        PATH_SUFFIXES bin
+    )
+endif()
+
 add_library(synera_core STATIC
     src/core/Bench.cpp
     src/core/Board.cpp
@@ -55,11 +65,21 @@ add_executable(synera_gui
 target_link_libraries(synera_gui PRIVATE synera_core Qt6::Widgets)
 target_compile_definitions(synera_gui PRIVATE SYNERA_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+add_custom_command(TARGET synera_gui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:synera_gui>/assets"
+    COMMENT "Copying assets next to synera_gui"
+)
+
+if(WIN32 AND WINDEPLOYQT_EXECUTABLE)
     add_custom_command(TARGET synera_gui POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-                "$<TARGET_FILE_DIR:synera_gui>/assets"
-        COMMENT "Copying assets next to synera_gui"
+        COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                --no-translations
+                --compiler-runtime
+                "$<TARGET_FILE:synera_gui>"
+        COMMENT "Deploying Qt runtime next to synera_gui"
     )
+elseif(WIN32)
+    message(WARNING "windeployqt was not found; synera_gui may not open outside a Qt-enabled shell.")
 endif()

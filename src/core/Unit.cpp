@@ -195,22 +195,22 @@ std::string BasicUnit::archetype() const {
 
 void BasicUnit::castSkill(SkillContext&) {}
 
-std::string Vanguard::archetype() const {
-    return "Vanguard";
+std::string PeaBurst::archetype() const {
+    return "PeaBurst";
 }
 
-void Vanguard::castSkill(SkillContext& context) {
+void PeaBurst::castSkill(SkillContext& context) {
     const auto target = context.targetId();
     if (target.has_value()) {
         context.dealDamage(*target, atk() * 2);
     }
 }
 
-std::string SparkMage::archetype() const {
-    return "SparkMage";
+std::string FumeLineCaster::archetype() const {
+    return "FumeLineCaster";
 }
 
-void SparkMage::castSkill(SkillContext& context) {
+void FumeLineCaster::castSkill(SkillContext& context) {
     const auto targetPosition = context.targetPosition();
     if (!targetPosition.has_value()) {
         return;
@@ -222,11 +222,11 @@ void SparkMage::castSkill(SkillContext& context) {
     }
 }
 
-std::string IrisGuard::archetype() const {
-    return "IrisGuard";
+std::string SunHealer::archetype() const {
+    return "SunHealer";
 }
 
-void IrisGuard::castSkill(SkillContext& context) {
+void SunHealer::castSkill(SkillContext& context) {
     const auto casterPosition = context.casterPosition();
     if (!casterPosition.has_value()) {
         return;

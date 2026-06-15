@@ -10,14 +10,17 @@
 
 namespace synera::gui {
 
+class AssetManager;
+
 class SynergyPanel : public QWidget {
 public:
-    explicit SynergyPanel(const GameState* game, QWidget* parent = nullptr);
+    explicit SynergyPanel(const GameState* game, AssetManager* assets, QWidget* parent = nullptr);
 
     void refreshFromState();
 
 private:
     const GameState* game_;
+    AssetManager* assets_;
     QVBoxLayout* listLayout_ = nullptr;
 };
 

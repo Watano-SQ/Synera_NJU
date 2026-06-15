@@ -32,11 +32,11 @@ MainWindow::MainWindow(QWidget* parent)
     auto* statusRow = new QHBoxLayout();
     playerStatusLabel_ = new QLabel(this);
     phaseLabel_ = new QLabel(this);
-    upgradeButton_ = new QPushButton("Upgrade", this);
-    saveButton_ = new QPushButton("Save", this);
-    loadButton_ = new QPushButton("Load", this);
-    startCombatButton_ = new QPushButton("Start Combat", this);
-    resolveButton_ = new QPushButton("Resolve", this);
+    upgradeButton_ = new QPushButton("升级人口", this);
+    saveButton_ = new QPushButton("存档", this);
+    loadButton_ = new QPushButton("读档", this);
+    startCombatButton_ = new QPushButton("开始守家", this);
+    resolveButton_ = new QPushButton("结算", this);
     statusRow->addWidget(playerStatusLabel_);
     statusRow->addStretch();
     statusRow->addWidget(phaseLabel_);
@@ -52,9 +52,9 @@ MainWindow::MainWindow(QWidget* parent)
     boardWidget_ = new BoardWidget(&game_, &assets_, this);
     benchWidget_ = new BenchWidget(&game_, &assets_, this);
     inspectorPanel_ = new InspectorPanel(&game_, this);
-    shopPanel_ = new ShopPanel(&game_, this);
-    equipmentPanel_ = new EquipmentPanel(&game_, this);
-    synergyPanel_ = new SynergyPanel(&game_, this);
+    shopPanel_ = new ShopPanel(&game_, &assets_, this);
+    equipmentPanel_ = new EquipmentPanel(&game_, &assets_, this);
+    synergyPanel_ = new SynergyPanel(&game_, &assets_, this);
 
     leftColumn->addWidget(boardWidget_, 0, Qt::AlignLeft);
     leftColumn->addWidget(benchWidget_, 0, Qt::AlignLeft);
@@ -89,7 +89,7 @@ MainWindow::MainWindow(QWidget* parent)
     combatTimer_->setInterval(16);
     connect(combatTimer_, &QTimer::timeout, this, &MainWindow::advanceCombat);
 
-    setWindowTitle("Synera - Stage 3 GUI");
+    setWindowTitle("植物自走棋 - PvZ Auto Arena");
     resize(1180, 820);
     refreshFromState();
     statusBar()->showMessage("Ready");
@@ -101,7 +101,7 @@ void MainWindow::refreshFromState() {
     }
 
     playerStatusLabel_->setText(
-        QString("HP %1  Gold %2  Level %3  Population %4/%5  Round %6  Result %7")
+        QString("脑子 %1  阳光 %2  等级 %3  人口 %4/%5  波次 %6  战局 %7")
             .arg(game_.player().hp())
             .arg(game_.player().gold())
             .arg(game_.player().level())
@@ -109,7 +109,7 @@ void MainWindow::refreshFromState() {
             .arg(game_.player().unitCap())
             .arg(game_.player().currentRound())
             .arg(QString::fromStdString(toString(game_.matchResult()))));
-    phaseLabel_->setText("Phase: " + phaseText());
+    phaseLabel_->setText("阶段: " + phaseText());
 
     const bool canDrag = game_.phase() == GamePhase::Prep;
     const bool canManage = game_.phase() == GamePhase::Prep;
@@ -137,11 +137,11 @@ void MainWindow::initializeGame() {
     game_.player().setLevel(1);
     game_.player().setUnitCap(3);
 
-    const UnitId vanguard = game_.addUnitToBench(makeCatalogUnit("aster_vanguard"));
-    game_.addUnitToBench(makeCatalogUnit("mira_spark"));
-    game_.addUnitToBench(makeCatalogUnit("iris_guard"));
+    const UnitId starter = game_.addUnitToBench(makeCatalogUnit("peashooter"));
+    game_.addUnitToBench(makeCatalogUnit("sunflower"));
+    game_.addUnitToBench(makeCatalogUnit("wallnut"));
     game_.deployFromBench(0, Position{7, 3}, PlacementPolicy::Reject);
-    selectedUnit_ = vanguard;
+    selectedUnit_ = starter;
 }
 
 void MainWindow::setSelectedUnit(std::optional<UnitId> unitId) {
@@ -248,6 +248,16 @@ void MainWindow::resolveRound() {
 }
 
 QString MainWindow::phaseText() const {
+    switch (game_.phase()) {
+        case GamePhase::Prep:
+            return "准备";
+        case GamePhase::Combat:
+            return "守家";
+        case GamePhase::Resolve:
+            return "结算";
+        case GamePhase::GameOver:
+            return "结束";
+    }
     return QString::fromStdString(toString(game_.phase()));
 }
 

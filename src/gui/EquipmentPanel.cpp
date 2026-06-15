@@ -1,14 +1,18 @@
 #include "EquipmentPanel.h"
 
+#include "AssetManager.h"
 #include "core/Catalog.h"
 
+#include <QIcon>
 #include <QLayoutItem>
+#include <QSize>
 
 namespace synera::gui {
 
-EquipmentPanel::EquipmentPanel(const GameState* game, QWidget* parent) : QWidget(parent), game_(game) {
+EquipmentPanel::EquipmentPanel(const GameState* game, AssetManager* assets, QWidget* parent)
+    : QWidget(parent), game_(game), assets_(assets) {
     auto* root = new QVBoxLayout(this);
-    auto* title = new QLabel("Equipment", this);
+    auto* title = new QLabel("装备栏", this);
     QFont titleFont = title->font();
     titleFont.setBold(true);
     title->setFont(titleFont);
@@ -43,6 +47,13 @@ void EquipmentPanel::refreshFromState() {
         const QString label = definition != nullptr ? QString::fromStdString(definition->name)
                                                     : QString::fromStdString(instance.itemDefId);
         auto* button = new QPushButton(label + (selectedItem_ == instance.itemId ? " *" : ""), this);
+        if (definition != nullptr && assets_ != nullptr) {
+            const QPixmap* pixmap = assets_->pixmapFor(definition->visualKey);
+            if (pixmap != nullptr) {
+                button->setIcon(QIcon(*pixmap));
+                button->setIconSize(QSize(28, 28));
+            }
+        }
         button->setEnabled(game_->phase() == GamePhase::Prep);
         connect(button, &QPushButton::clicked, this, [this, itemId = instance.itemId]() {
             selectedItem_ = itemId;

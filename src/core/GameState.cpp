@@ -253,38 +253,38 @@ ItemId GameState::addItemToInventory(const std::string& itemDefId) {
 
 ActionResult GameState::refreshShop() {
     if (phase_ != GamePhase::Prep) {
-        return {false, "refreshShop is only valid during Prep."};
+        return {false, "只能在准备阶段刷新商店。"};
     }
     constexpr int refreshCost = 2;
     if (player_.gold() < refreshCost) {
-        return {false, "Not enough gold to refresh shop."};
+        return {false, "阳光不足，无法刷新商店。"};
     }
     player_.setGold(player_.gold() - refreshCost);
     generateShopOffersFree();
-    return {true, "Shop refreshed."};
+    return {true, "商店已刷新。"};
 }
 
 ActionResult GameState::purchaseShopSlot(std::size_t index) {
     if (phase_ != GamePhase::Prep) {
-        return {false, "purchaseShopSlot is only valid during Prep."};
+        return {false, "只能在准备阶段种下植物。"};
     }
     if (index >= shopOffers_.size()) {
-        return {false, "Shop slot index is invalid."};
+        return {false, "商店位置无效。"};
     }
     if (!shopOffers_[index].has_value()) {
-        return {false, "Shop slot is empty."};
+        return {false, "这个商店位置是空的。"};
     }
 
     const ShopOffer offer = *shopOffers_[index];
     const UnitDefinition* definition = findUnitDefinition(offer.definitionId);
     if (definition == nullptr) {
-        return {false, "Shop offer references an unknown unit."};
+        return {false, "商店植物定义不存在。"};
     }
     if (player_.gold() < offer.cost) {
-        return {false, "Not enough gold to purchase unit."};
+        return {false, "阳光不足，无法种下植物。"};
     }
     if (!bench_.firstEmptySlot().has_value()) {
-        return {false, "Bench is full."};
+        return {false, "备战区已满。"};
     }
 
     player_.setGold(player_.gold() - offer.cost);
@@ -293,42 +293,42 @@ ActionResult GameState::purchaseShopSlot(std::size_t index) {
     maybeMergeUnit(id);
     shopOffers_[index].reset();
     recomputePrepSynergiesAndStats();
-    return {true, "Unit purchased."};
+    return {true, "植物已加入备战区。"};
 }
 
 ActionResult GameState::upgradePopulation() {
     if (phase_ != GamePhase::Prep) {
-        return {false, "upgradePopulation is only valid during Prep."};
+        return {false, "只能在准备阶段升级人口。"};
     }
     constexpr int maxLevel = 6;
     constexpr int maxUnitCap = 8;
     if (player_.level() >= maxLevel) {
-        return {false, "Population level is already at maximum."};
+        return {false, "人口等级已达到上限。"};
     }
     const int cost = 4 + 2 * (player_.level() - 1);
     if (player_.gold() < cost) {
-        return {false, "Not enough gold to upgrade population."};
+        return {false, "阳光不足，无法升级人口。"};
     }
 
     player_.setGold(player_.gold() - cost);
     player_.setLevel(player_.level() + 1);
     player_.setUnitCap(std::min(maxUnitCap, player_.unitCap() + 1));
-    return {true, "Population upgraded."};
+    return {true, "人口已升级。"};
 }
 
 ActionResult GameState::equipItem(ItemId itemId, UnitId unitId) {
     if (phase_ != GamePhase::Prep) {
-        return {false, "equipItem is only valid during Prep."};
+        return {false, "只能在准备阶段穿戴装备。"};
     }
     if (!hasItemInInventory(itemId)) {
-        return {false, "Item is not in inventory."};
+        return {false, "装备不在库存中。"};
     }
     Unit* target = unit(unitId);
     if (target == nullptr || target->owner() != Owner::PlayerCtrl) {
-        return {false, "Only player units can equip items."};
+        return {false, "只有玩家植物可以穿戴装备。"};
     }
     if (target->equippedItemId().has_value()) {
-        return {false, "Unit already has an item."};
+        return {false, "该植物已经有装备。"};
     }
 
     equipmentInventory_.erase(std::remove(equipmentInventory_.begin(), equipmentInventory_.end(), itemId),
@@ -336,7 +336,7 @@ ActionResult GameState::equipItem(ItemId itemId, UnitId unitId) {
     target->setEquippedItemId(itemId);
     computeEffectiveStats(unitId);
     recomputePrepSynergiesAndStats();
-    return {true, "Item equipped."};
+    return {true, "装备已穿戴。"};
 }
 
 UnitStats GameState::computeEffectiveStats(UnitId id) {
@@ -376,14 +376,14 @@ UnitStats GameState::computeEffectiveStats(UnitId id) {
         if (target->owner() != Owner::PlayerCtrl || !synergy.active || !hasTrait(*target, synergy.trait)) {
             continue;
         }
-        if (synergy.trait == "Warrior") {
-            stats.atk += synergy.activeThreshold >= 4 ? 25 : 10;
-        } else if (synergy.trait == "Guardian") {
-            stats.maxHp += synergy.activeThreshold >= 4 ? 250 : 100;
-        } else if (synergy.trait == "Mystic") {
-            stats.maxMana = std::max(10, stats.maxMana + (synergy.activeThreshold >= 3 ? -20 : -10));
-        } else if (synergy.trait == "Ranger") {
-            stats.attackInterval = percentAdjusted(stats.attackInterval, -10);
+        if (synergy.trait == "shooter") {
+            stats.attackInterval = percentAdjusted(stats.attackInterval, synergy.activeThreshold >= 4 ? -20 : -10);
+        } else if (synergy.trait == "nut") {
+            stats.maxHp += synergy.activeThreshold >= 4 ? 450 : 200;
+        } else if (synergy.trait == "fungus") {
+            stats.maxMana = std::max(10, stats.maxMana + (synergy.activeThreshold >= 4 ? -25 : -10));
+        } else if (synergy.trait == "spike") {
+            stats.atk += 15;
         }
     }
 
@@ -393,12 +393,12 @@ UnitStats GameState::computeEffectiveStats(UnitId id) {
 
 ActionResult GameState::saveToFile(const std::string& path) const {
     if (phase_ == GamePhase::Combat) {
-        return {false, "Saving during Combat is not supported."};
+        return {false, "守家阶段不能存档。"};
     }
 
     std::ofstream out(path);
     if (!out) {
-        return {false, "Failed to open save file for writing."};
+        return {false, "无法打开存档文件进行写入。"};
     }
 
     out << "SYNERA_SAVE 1\n";
@@ -482,7 +482,7 @@ ActionResult GameState::saveToFile(const std::string& path) const {
 ActionResult GameState::loadFromFile(const std::string& path) {
     std::ifstream in(path);
     if (!in) {
-        return {false, "Failed to open save file for reading."};
+        return {false, "无法打开存档文件进行读取。"};
     }
 
     auto fail = [](const std::string& message) { return ActionResult{false, message}; };
@@ -850,10 +850,10 @@ std::vector<UnitId> GameState::generateEnemiesForRound(int round) {
 
 ActionResult GameState::startCombat() {
     if (phase_ != GamePhase::Prep) {
-        return {false, "startCombat is only valid during Prep."};
+        return {false, "只能在准备阶段开始守家。"};
     }
     if (matchResult_ != MatchResult::Ongoing) {
-        return {false, "The match has already ended."};
+        return {false, "战局已经结束。"};
     }
 
     activeSynergies_ = computeSynergiesFromBoard();
@@ -865,12 +865,12 @@ ActionResult GameState::startCombat() {
         runtime_.clear();
         lastRoundResult_ = RoundResult::PlayerDefeat;
         phase_ = GamePhase::Resolve;
-        return {true, "Player defeated: no active units."};
+        return {true, "没有上场植物，本轮失败。"};
     }
 
     auto spawnPlan = EncounterGenerator::plan(*this, player_.currentRound(), true);
     if (spawnPlan.empty()) {
-        return {false, "No valid enemy spawn positions for this round."};
+        return {false, "本波没有可用的僵尸生成位置。"};
     }
 
     clearAllEnemyUnits();
@@ -893,12 +893,12 @@ ActionResult GameState::startCombat() {
     phase_ = GamePhase::Combat;
     lastRoundResult_ = RoundResult::None;
     initializeRuntime();
-    return {true, "Combat started."};
+    return {true, "僵尸来袭。"};
 }
 
 ActionResult GameState::tickCombat() {
     if (phase_ != GamePhase::Combat) {
-        return {false, "tickCombat is only valid during Combat."};
+        return {false, "只能在守家阶段推进战斗。"};
     }
 
     std::vector<UnitId> active = activeCombatUnits();
@@ -968,14 +968,14 @@ ActionResult GameState::tickCombat() {
     checkCombatEnd();
 
     if (phase_ == GamePhase::Resolve) {
-        return {true, "Combat resolved."};
+        return {true, "战斗已进入结算。"};
     }
-    return {true, "Combat tick advanced."};
+    return {true, "战斗已推进。"};
 }
 
 ActionResult GameState::resolveRound() {
     if (phase_ != GamePhase::Resolve) {
-        return {false, "resolveRound is only valid during Resolve."};
+        return {false, "只能在结算阶段完成本波结算。"};
     }
 
     std::string message;
@@ -985,16 +985,17 @@ ActionResult GameState::resolveRound() {
     playerCombatSnapshot_.clear();
 
     if (lastRoundResult_ == RoundResult::PlayerVictory) {
-        player_.setGold(player_.gold() + combatConfig_.victoryGold);
+        const int goldReward = combatConfig_.victoryGold + settlementGoldBonusFromSynergies();
+        player_.setGold(player_.gold() + goldReward);
         dropVictoryItemIfNeeded();
         if (player_.currentRound() >= combatConfig_.maxRound) {
             matchResult_ = MatchResult::PlayerVictory;
             phase_ = GamePhase::GameOver;
-            message += " Match won.";
+            message += " 战局胜利。";
         } else {
             player_.setCurrentRound(player_.currentRound() + 1);
             phase_ = GamePhase::Prep;
-            message += " Round won.";
+            message += " 本波守住了。";
             recomputePrepSynergiesAndStats();
         }
     } else if (lastRoundResult_ == RoundResult::PlayerDefeat) {
@@ -1003,19 +1004,19 @@ ActionResult GameState::resolveRound() {
         if (player_.hp() <= 0) {
             matchResult_ = MatchResult::PlayerDefeat;
             phase_ = GamePhase::GameOver;
-            message += " Match lost.";
+            message += " 战局失败。";
         } else {
             phase_ = GamePhase::Prep;
-            message += " Round lost. Retry current round.";
+            message += " 本波失守，重试当前波次。";
             recomputePrepSynergiesAndStats();
         }
     } else {
         phase_ = GamePhase::Prep;
-        message += " Resolve completed without a round result.";
+        message += " 结算完成，但没有胜负结果。";
         recomputePrepSynergiesAndStats();
     }
 
-    return {true, message.empty() ? "Round resolved." : message};
+    return {true, message.empty() ? "本波已结算。" : message};
 }
 
 std::vector<UnitId> GameState::activePlayerUnits() const {
@@ -1289,8 +1290,8 @@ void GameState::applyCombatEffects(const std::vector<CombatEffect>& damageEvents
         int& hp = hpFor(effect.target);
         int amount = effect.amount;
         const Unit* source = unit(effect.source);
-        if (source != nullptr && ownerHasActiveSynergy(source->owner(), "Healer")) {
-            amount = amount * 120 / 100;
+        if (source != nullptr && ownerHasActiveSynergy(source->owner(), "healer")) {
+            amount = amount * 125 / 100;
         }
         hp = std::min(target->maxHp(), hp + amount);
     }
@@ -1454,11 +1455,12 @@ std::vector<SynergyStatus> GameState::computeSynergiesFromBoard() const {
     };
 
     std::vector<SynergyStatus> result;
-    result.push_back(makeStatus("Warrior", {2, 4}, "Warrior ATK +10", "Warrior ATK +25"));
-    result.push_back(makeStatus("Guardian", {2, 4}, "Guardian MaxHP +100", "Guardian MaxHP +250"));
-    result.push_back(makeStatus("Mystic", {2, 3}, "Mystic MaxMana -10", "Mystic MaxMana -20"));
-    result.push_back(makeStatus("Ranger", {2, 2}, "Ranger attack interval -10%", "Ranger attack interval -10%"));
-    result.push_back(makeStatus("Healer", {2, 2}, "Healing +20%", "Healing +20%"));
+    result.push_back(makeStatus("shooter", {2, 4}, "射手攻击间隔 -10%", "射手攻击间隔 -20%"));
+    result.push_back(makeStatus("nut", {2, 4}, "坚果最大生命 +200", "坚果最大生命 +450"));
+    result.push_back(makeStatus("sun", {2, 3}, "胜利结算阳光 +1", "胜利结算阳光 +2"));
+    result.push_back(makeStatus("healer", {2, 2}, "治疗效果 +25%", "治疗效果 +25%"));
+    result.push_back(makeStatus("fungus", {2, 4}, "真菌最大法力 -10", "真菌最大法力 -25"));
+    result.push_back(makeStatus("spike", {2, 2}, "地刺攻击力 +15", "地刺攻击力 +15"));
     return result;
 }
 
@@ -1573,6 +1575,15 @@ void GameState::dropVictoryItemIfNeeded() {
     }
     const std::size_t index = static_cast<std::size_t>((player_.currentRound() - 1) % static_cast<int>(definitions.size()));
     addItemToInventory(definitions[index].itemDefId);
+}
+
+int GameState::settlementGoldBonusFromSynergies() const {
+    for (const SynergyStatus& synergy : activeSynergies_) {
+        if (synergy.trait == "sun" && synergy.active) {
+            return synergy.activeThreshold >= 3 ? 2 : 1;
+        }
+    }
+    return 0;
 }
 
 bool GameState::ownerHasActiveSynergy(Owner owner, const std::string& trait) const {

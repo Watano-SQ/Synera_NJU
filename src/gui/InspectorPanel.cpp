@@ -11,7 +11,7 @@ namespace synera::gui {
 
 InspectorPanel::InspectorPanel(const GameState* game, QWidget* parent) : QWidget(parent), game_(game) {
     auto* root = new QVBoxLayout(this);
-    auto* title = new QLabel("Unit Inspector", this);
+    auto* title = new QLabel("单位详情", this);
     QFont titleFont = title->font();
     titleFont.setBold(true);
     titleFont.setPointSize(titleFont.pointSize() + 2);
@@ -42,21 +42,21 @@ InspectorPanel::InspectorPanel(const GameState* game, QWidget* parent) : QWidget
     placementValue_->setWordWrap(true);
     visualKeyValue_->setWordWrap(true);
 
-    form->addRow("Name", nameValue_);
-    form->addRow("Star", starValue_);
-    form->addRow("Equipment", equipmentValue_);
-    form->addRow("Archetype", archetypeValue_);
-    form->addRow("Owner", ownerValue_);
-    form->addRow("State", stateValue_);
-    form->addRow("HP", hpValue_);
-    form->addRow("ATK", atkValue_);
-    form->addRow("Range", rangeValue_);
-    form->addRow("Mana", manaValue_);
-    form->addRow("Base Stats", baseStatsValue_);
-    form->addRow("Effective Stats", effectiveStatsValue_);
-    form->addRow("Traits", traitsValue_);
-    form->addRow("Placement", placementValue_);
-    form->addRow("Visual Key", visualKeyValue_);
+    form->addRow("名称", nameValue_);
+    form->addRow("星级", starValue_);
+    form->addRow("装备", equipmentValue_);
+    form->addRow("技能类型", archetypeValue_);
+    form->addRow("归属", ownerValue_);
+    form->addRow("状态", stateValue_);
+    form->addRow("生命", hpValue_);
+    form->addRow("攻击", atkValue_);
+    form->addRow("距离", rangeValue_);
+    form->addRow("法力", manaValue_);
+    form->addRow("基础属性", baseStatsValue_);
+    form->addRow("最终属性", effectiveStatsValue_);
+    form->addRow("羁绊", traitsValue_);
+    form->addRow("位置", placementValue_);
+    form->addRow("资源键", visualKeyValue_);
     root->addLayout(form);
     root->addStretch();
     refreshFromState();
@@ -108,7 +108,8 @@ void InspectorPanel::refreshFromState() {
 QString InspectorPanel::traitsText(const Unit& unit) const {
     QStringList parts;
     for (const std::string& trait : unit.traits()) {
-        parts << QString::fromStdString(trait);
+        const TraitDefinition* definition = findTraitDefinition(trait);
+        parts << QString::fromStdString(definition != nullptr ? definition->displayName : trait);
     }
     return parts.isEmpty() ? "-" : parts.join(", ");
 }

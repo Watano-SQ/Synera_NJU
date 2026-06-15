@@ -106,8 +106,16 @@ struct ShopOffer {
 struct ItemDefinition {
     std::string itemDefId;
     std::string name;
+    std::string visualKey;
     ItemEffectType effectType = ItemEffectType::Attack;
     int value = 0;
+};
+
+struct TraitDefinition {
+    std::string traitId;
+    std::string displayName;
+    std::string visualKey;
+    std::string description;
 };
 
 struct ItemInstance {

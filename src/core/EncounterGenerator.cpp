@@ -55,40 +55,103 @@ std::vector<Position> deterministicEnemyCells(const GameState& state, bool ignor
     return cells;
 }
 
-std::unique_ptr<Unit> makeEnemy(int round, int index) {
-    const int clampedRound = std::max(1, round);
-    const int hp = 150 + clampedRound * 35 + index * 25;
-    const int atk = 18 + clampedRound * 5 + index * 3;
-    std::vector<std::string> traits{"Neutral"};
-    if (clampedRound >= 3 || index >= 2) {
-        traits.push_back("Elite");
-    }
+EnemyTemplate zombieTemplate() {
+    return EnemyTemplate{"普通僵尸",
+                         UnitStats{185, 23, 1, 60, 60, 20},
+                         {"zombie"},
+                         "enemies/zombie",
+                         "BasicUnit"};
+}
 
-    return std::make_unique<BasicUnit>(
-        "Round " + std::to_string(clampedRound) + " Enemy " + std::to_string(index + 1),
-        Owner::EnemyCtrl,
-        hp,
-        atk,
-        1,
-        60,
-        traits,
-        index >= 2 ? "enemy_elite" : "enemy_basic");
+EnemyTemplate coneheadTemplate() {
+    return EnemyTemplate{"路障僵尸",
+                         UnitStats{250, 26, 1, 60, 62, 20},
+                         {"zombie", "armored"},
+                         "enemies/conehead_zombie",
+                         "BasicUnit"};
+}
+
+EnemyTemplate screenDoorTemplate() {
+    return EnemyTemplate{"铁门僵尸",
+                         UnitStats{330, 24, 1, 60, 68, 20},
+                         {"zombie", "armored"},
+                         "enemies/screendoor_zombie",
+                         "BasicUnit"};
+}
+
+EnemyTemplate newspaperTemplate() {
+    return EnemyTemplate{"读报僵尸",
+                         UnitStats{260, 36, 1, 60, 50, 20},
+                         {"zombie", "frenzy"},
+                         "enemies/newspaper_zombie",
+                         "BasicUnit"};
+}
+
+EnemyTemplate footballTemplate() {
+    return EnemyTemplate{"橄榄球僵尸",
+                         UnitStats{430, 42, 1, 60, 44, 20},
+                         {"zombie", "elite"},
+                         "enemies/football_zombie",
+                         "BasicUnit"};
+}
+
+EnemyTemplate jackboxTemplate() {
+    return EnemyTemplate{"小丑僵尸",
+                         UnitStats{330, 55, 1, 50, 54, 20},
+                         {"zombie", "elite"},
+                         "enemies/jackbox_zombie",
+                         "BasicUnit"};
+}
+
+std::unique_ptr<Unit> makeEnemy(const EnemyTemplate& enemyTemplate, int round) {
+    const int scalingRounds = std::max(0, round - 1);
+    UnitStats stats = enemyTemplate.stats;
+    stats.maxHp += scalingRounds * 25;
+    stats.atk += scalingRounds * 4;
+
+    return std::make_unique<BasicUnit>(enemyTemplate.name,
+                                       Owner::EnemyCtrl,
+                                       stats.maxHp,
+                                       stats.atk,
+                                       stats.range,
+                                       stats.maxMana,
+                                       enemyTemplate.traits,
+                                       enemyTemplate.visualKey);
 }
 
 }  // namespace
+
+std::vector<EnemyTemplate> EncounterGenerator::templatesForRound(int round) {
+    const int clampedRound = std::max(1, round);
+    if (clampedRound == 1) {
+        return {zombieTemplate()};
+    }
+    if (clampedRound == 2) {
+        return {zombieTemplate(), coneheadTemplate()};
+    }
+    if (clampedRound == 3) {
+        return {zombieTemplate(), coneheadTemplate(), screenDoorTemplate()};
+    }
+    if (clampedRound == 4) {
+        return {newspaperTemplate(), coneheadTemplate(), screenDoorTemplate()};
+    }
+    return {footballTemplate(), jackboxTemplate(), screenDoorTemplate()};
+}
 
 std::vector<EnemySpawnPlan> EncounterGenerator::plan(const GameState& state,
                                                      int round,
                                                      bool ignoreExistingEnemies) {
     const int clampedRound = std::max(1, round);
-    const int desiredCount = std::min(3, clampedRound);
+    const std::vector<EnemyTemplate> templates = templatesForRound(clampedRound);
+    const int desiredCount = static_cast<int>(templates.size());
     const std::vector<Position> cells = deterministicEnemyCells(state, ignoreExistingEnemies);
     const int spawnCount = std::min(desiredCount, static_cast<int>(cells.size()));
 
     std::vector<EnemySpawnPlan> result;
     result.reserve(static_cast<std::size_t>(spawnCount));
     for (int i = 0; i < spawnCount; ++i) {
-        result.push_back(EnemySpawnPlan{cells[static_cast<std::size_t>(i)], makeEnemy(clampedRound, i)});
+        result.push_back(EnemySpawnPlan{cells[static_cast<std::size_t>(i)],
+                                        makeEnemy(templates[static_cast<std::size_t>(i)], clampedRound)});
     }
     return result;
 }

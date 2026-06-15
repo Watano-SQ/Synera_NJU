@@ -17,6 +17,7 @@ namespace {
 
 constexpr int kCellSize = 64;
 constexpr int kMargin = 12;
+constexpr const char* kBoardBackgroundKey = "backgrounds/day_board";
 
 QString shortLabel(const Unit& unit, UnitId id) {
     const QString prefix = unit.owner() == Owner::PlayerCtrl ? "P" : "E";
@@ -63,6 +64,15 @@ void BoardWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor("#f7f8fb"));
+
+    const QRect boardRect(kMargin,
+                          kMargin,
+                          game_->board().cols() * kCellSize,
+                          game_->board().rows() * kCellSize);
+    const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor(kBoardBackgroundKey) : nullptr;
+    if (background != nullptr) {
+        painter.drawPixmap(boardRect, *background);
+    }
 
     for (int row = 0; row < game_->board().rows(); ++row) {
         for (int col = 0; col < game_->board().cols(); ++col) {
@@ -252,7 +262,10 @@ QRect BoardWidget::cellRect(Position position) const {
 
 void BoardWidget::drawCellBase(QPainter& painter, Position position, const QRect& rect) const {
     painter.save();
-    const QColor fill = game_->board().isEnemyHalf(position) ? QColor("#fde9e7") : QColor("#e8f1ff");
+    const bool hasBackground = assets_ != nullptr && assets_->pixmapFor(kBoardBackgroundKey) != nullptr;
+    const QColor fill = game_->board().isEnemyHalf(position)
+                            ? (hasBackground ? QColor(248, 205, 190, 120) : QColor("#fde9e7"))
+                            : (hasBackground ? QColor(182, 229, 147, 95) : QColor("#e8f1ff"));
     painter.fillRect(rect, fill);
     painter.restore();
 }

@@ -1,13 +1,16 @@
 #include "core/Catalog.h"
+#include "core/EncounterGenerator.h"
 #include "core/GameState.h"
 #include "core/Unit.h"
 
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 using namespace synera;
@@ -38,6 +41,23 @@ const SynergyStatus* findSynergy(const GameState& game, const std::string& trait
     return nullptr;
 }
 
+std::filesystem::path findAssetRoot() {
+    std::filesystem::path path = std::filesystem::current_path();
+    for (int i = 0; i < 5; ++i) {
+        if (std::filesystem::exists(path / "assets")) {
+            return path / "assets";
+        }
+        path = path.parent_path();
+    }
+    return std::filesystem::current_path() / "assets";
+}
+
+bool assetExists(const std::filesystem::path& assetRoot, const std::string& visualKey) {
+    return std::filesystem::exists(assetRoot / (visualKey + ".png")) ||
+           std::filesystem::exists(assetRoot / (visualKey + ".jpg")) ||
+           std::filesystem::exists(assetRoot / (visualKey + ".jpeg"));
+}
+
 void testInitialShopPurchaseAndRefresh() {
     GameState game(8, 8, 8, stage3Config());
     assert(game.shopOffers().size() == 5);
@@ -66,8 +86,8 @@ void testInitialShopPurchaseAndRefresh() {
 void testBusinessApisArePrepOnlyAndCombatSaveRejected() {
     GameState game(8, 8, 8, stage3Config());
     game.player().setGold(20);
-    game.addItemToInventory("iron_sword");
-    const UnitId unitId = game.addUnitToBench(unitFromDefinition("aster_vanguard"));
+    game.addItemToInventory("plant_food");
+    const UnitId unitId = game.addUnitToBench(unitFromDefinition("peashooter"));
     assert(game.deployFromBench(0, Position{7, 4}));
     assert(game.startCombat().success);
 
@@ -81,10 +101,10 @@ void testBusinessApisArePrepOnlyAndCombatSaveRejected() {
 void testPopulationLimitAndUpgrade() {
     GameState game(8, 8, 8, stage3Config());
     game.player().setGold(20);
-    game.addUnitToBench(unitFromDefinition("aster_vanguard"));
-    game.addUnitToBench(unitFromDefinition("mira_spark"));
-    game.addUnitToBench(unitFromDefinition("iris_guard"));
-    game.addUnitToBench(unitFromDefinition("rowan_ranger"));
+    game.addUnitToBench(unitFromDefinition("peashooter"));
+    game.addUnitToBench(unitFromDefinition("sunflower"));
+    game.addUnitToBench(unitFromDefinition("wallnut"));
+    game.addUnitToBench(unitFromDefinition("repeater"));
 
     assert(game.deployFromBench(0, Position{7, 0}));
     assert(game.deployFromBench(1, Position{7, 1}));
@@ -101,11 +121,11 @@ void testPopulationLimitAndUpgrade() {
 
 void testMergeKeepsNewestAndReturnsRemovedEquipment() {
     GameState game(8, 8, 8, stage3Config());
-    const ItemId itemId = game.addItemToInventory("iron_sword");
-    const UnitId first = game.addUnitToBench(unitFromDefinition("aster_vanguard"));
+    const ItemId itemId = game.addItemToInventory("plant_food");
+    const UnitId first = game.addUnitToBench(unitFromDefinition("peashooter"));
     assert(game.equipItem(itemId, first).success);
-    game.addUnitToBench(unitFromDefinition("aster_vanguard"));
-    const UnitId newest = game.addUnitToBench(unitFromDefinition("aster_vanguard"));
+    game.addUnitToBench(unitFromDefinition("peashooter"));
+    const UnitId newest = game.addUnitToBench(unitFromDefinition("peashooter"));
 
     Unit* kept = game.unit(newest);
     assert(kept != nullptr);
@@ -121,9 +141,9 @@ void testMergeKeepsNewestAndReturnsRemovedEquipment() {
 
 void testRepeatedRecomputeDoesNotRepeatHpDeltaAndStarStats() {
     GameState game(8, 8, 8, stage3Config());
-    const UnitId first = game.addUnitToBench(unitFromDefinition("rowan_ranger"));
-    game.addUnitToBench(unitFromDefinition("rowan_ranger"));
-    const UnitId kept = game.addUnitToBench(unitFromDefinition("rowan_ranger"));
+    const UnitId first = game.addUnitToBench(unitFromDefinition("spikeweed"));
+    game.addUnitToBench(unitFromDefinition("spikeweed"));
+    const UnitId kept = game.addUnitToBench(unitFromDefinition("spikeweed"));
     assert(game.unit(first) == nullptr);
 
     Unit* unit = game.unit(kept);
@@ -143,46 +163,107 @@ void testRepeatedRecomputeDoesNotRepeatHpDeltaAndStarStats() {
 
 void testSynergyDedupAndCombatFreeze() {
     GameState game(8, 8, 8, stage3Config());
-    game.addUnitToBench(unitFromDefinition("aster_vanguard"));
-    game.addUnitToBench(unitFromDefinition("aster_vanguard"));
+    game.addUnitToBench(unitFromDefinition("peashooter"));
+    game.addUnitToBench(unitFromDefinition("peashooter"));
     assert(game.deployFromBench(0, Position{7, 0}));
     assert(game.deployFromBench(1, Position{7, 1}));
-    const SynergyStatus* warriorDedup = findSynergy(game, "Warrior");
-    assert(warriorDedup != nullptr);
-    assert(warriorDedup->count == 1);
-    assert(!warriorDedup->active);
+    const SynergyStatus* shooterDedup = findSynergy(game, "shooter");
+    assert(shooterDedup != nullptr);
+    assert(shooterDedup->count == 1);
+    assert(!shooterDedup->active);
 
     GameState combatGame(8, 8, 8, stage3Config());
-    const UnitId warriorA = combatGame.addUnitToBench(unitFromDefinition("aster_vanguard"));
-    const UnitId warriorB = combatGame.addUnitToBench(unitFromDefinition("mira_spark"));
+    const UnitId shooterA = combatGame.addUnitToBench(unitFromDefinition("peashooter"));
+    const UnitId shooterB = combatGame.addUnitToBench(unitFromDefinition("repeater"));
     assert(combatGame.deployFromBench(0, Position{7, 0}));
     assert(combatGame.deployFromBench(1, Position{7, 1}));
     assert(combatGame.startCombat().success);
-    const SynergyStatus* frozenWarrior = findSynergy(combatGame, "Warrior");
-    assert(frozenWarrior != nullptr && frozenWarrior->active && frozenWarrior->count == 2);
-    combatGame.unit(warriorA)->setHp(0);
-    combatGame.unit(warriorB)->setHp(0);
-    frozenWarrior = findSynergy(combatGame, "Warrior");
-    assert(frozenWarrior != nullptr && frozenWarrior->active && frozenWarrior->count == 2);
+    const SynergyStatus* frozenShooter = findSynergy(combatGame, "shooter");
+    assert(frozenShooter != nullptr && frozenShooter->active && frozenShooter->count == 2);
+    combatGame.unit(shooterA)->setHp(0);
+    combatGame.unit(shooterB)->setHp(0);
+    frozenShooter = findSynergy(combatGame, "shooter");
+    assert(frozenShooter != nullptr && frozenShooter->active && frozenShooter->count == 2);
 }
 
 void testEquipmentStats() {
     GameState game(8, 8, 8, stage3Config());
-    const UnitId crystalTarget = game.addUnitToBench(unitFromDefinition("aster_vanguard"));
+    const UnitId crystalTarget = game.addUnitToBench(unitFromDefinition("peashooter"));
     game.unit(crystalTarget)->setMana(60);
-    const ItemId crystal = game.addItemToInventory("blue_crystal");
+    const ItemId crystal = game.addItemToInventory("chlorophyll");
     assert(game.equipItem(crystal, crystalTarget).success);
     assert(game.unit(crystalTarget)->maxMana() == 30);
     assert(game.unit(crystalTarget)->mana() == 30);
 
-    const UnitId gloveTarget = game.addUnitToBench(unitFromDefinition("iris_guard"));
-    const UnitId untouched = game.addUnitToBench(unitFromDefinition("selene_mystic"));
+    const UnitId gloveTarget = game.addUnitToBench(unitFromDefinition("sunflower"));
+    const UnitId untouched = game.addUnitToBench(unitFromDefinition("puffshroom"));
     const int gloveBase = game.unit(gloveTarget)->attackInterval();
     const int untouchedBase = game.unit(untouched)->attackInterval();
-    const ItemId glove = game.addItemToInventory("swift_gloves");
+    const ItemId glove = game.addItemToInventory("garden_glove");
     assert(game.equipItem(glove, gloveTarget).success);
     assert(game.unit(gloveTarget)->attackInterval() < gloveBase);
     assert(game.unit(untouched)->attackInterval() == untouchedBase);
+
+    const UnitId shellTarget = game.addUnitToBench(unitFromDefinition("wallnut"));
+    const int shellBase = game.unit(shellTarget)->maxHp();
+    const ItemId shell = game.addItemToInventory("pumpkin_shell");
+    assert(game.equipItem(shell, shellTarget).success);
+    assert(game.unit(shellTarget)->maxHp() == shellBase + 150);
+}
+
+void testSunSynergyAddsOnlyVictoryGold() {
+    GameState victoryGame(8, 8, 8, stage3Config());
+    victoryGame.player().setGold(0);
+    const UnitId sunflower = victoryGame.addUnitToBench(unitFromDefinition("sunflower"));
+    victoryGame.addUnitToBench(unitFromDefinition("twin_sunflower"));
+    victoryGame.addUnitToBench(unitFromDefinition("peashooter"));
+    assert(victoryGame.deployFromBench(0, Position{7, 0}));
+    assert(victoryGame.deployFromBench(1, Position{7, 1}));
+    assert(victoryGame.deployFromBench(2, Position{7, 2}));
+    victoryGame.unit(sunflower)->setBaseStats(UnitStats{500, 999, 10, 60, 1, 1});
+    assert(victoryGame.startCombat().success);
+    assert(victoryGame.tickCombat().success);
+    assert(victoryGame.phase() == GamePhase::Resolve);
+    assert(victoryGame.resolveRound().success);
+    assert(victoryGame.player().gold() == stage3Config().victoryGold + 1);
+
+    GameState defeatGame(8, 8, 8, stage3Config());
+    defeatGame.player().setGold(0);
+    defeatGame.player().setCurrentRound(1);
+    defeatGame.addUnitToBench(unitFromDefinition("sunflower"));
+    defeatGame.addUnitToBench(unitFromDefinition("twin_sunflower"));
+    assert(defeatGame.startCombat().success);
+    assert(defeatGame.phase() == GamePhase::Resolve);
+    assert(defeatGame.resolveRound().success);
+    assert(defeatGame.player().gold() == stage3Config().defeatGold);
+}
+
+void testCatalogAndAssetKeysAreValid() {
+    assert(findUnitDefinition("peashooter") != nullptr);
+    assert(findUnitDefinition("sunflower") != nullptr);
+    assert(findItemDefinition("plant_food") != nullptr);
+    assert(findTraitDefinition("shooter") != nullptr);
+
+    const std::filesystem::path assetRoot = findAssetRoot();
+    for (const UnitDefinition& unit : unitCatalog()) {
+        assert(assetExists(assetRoot, unit.visualKey));
+    }
+    for (const ItemDefinition& item : itemCatalog()) {
+        assert(assetExists(assetRoot, item.visualKey));
+    }
+    for (const TraitDefinition& trait : traitCatalog()) {
+        assert(assetExists(assetRoot, trait.visualKey));
+    }
+
+    std::unordered_set<std::string> enemyVisualKeys;
+    for (int round = 1; round <= 5; ++round) {
+        for (const EnemyTemplate& enemyTemplate : EncounterGenerator::templatesForRound(round)) {
+            enemyVisualKeys.insert(enemyTemplate.visualKey);
+        }
+    }
+    for (const std::string& visualKey : enemyVisualKeys) {
+        assert(assetExists(assetRoot, visualKey));
+    }
 }
 
 void writeInvalidDefinitionSave(const std::string& path) {
@@ -220,8 +301,8 @@ void writeConflictingPlacementSave(const std::string& path) {
         << "OFFER 4 EMPTY 0\n"
         << "ITEMS 0\n"
         << "UNITS 2\n"
-        << "UNIT 1 aster_vanguard PlayerCtrl 1 1 420 0 0 BOARD -1 7 0\n"
-        << "UNIT 2 mira_spark PlayerCtrl 1 2 260 0 0 BOARD -1 7 0\n"
+        << "UNIT 1 peashooter PlayerCtrl 1 1 300 0 0 BOARD -1 7 0\n"
+        << "UNIT 2 repeater PlayerCtrl 1 2 320 0 0 BOARD -1 7 0\n"
         << "SNAPSHOTS 0\n"
         << "END\n";
 }
@@ -229,7 +310,7 @@ void writeConflictingPlacementSave(const std::string& path) {
 void testLoadFailureLeavesOriginalStateUntouched() {
     GameState game(8, 8, 8, stage3Config());
     game.player().setGold(17);
-    const UnitId existing = game.addUnitToBench(unitFromDefinition("iris_guard"));
+    const UnitId existing = game.addUnitToBench(unitFromDefinition("sunflower"));
     assert(game.unit(existing) != nullptr);
 
     writeInvalidDefinitionSave("stage3_bad_def.sav");
@@ -249,8 +330,8 @@ void testLoadFailureLeavesOriginalStateUntouched() {
 void testSaveLoadRoundTripRestoresAuthoritativeState() {
     GameState game(8, 8, 8, stage3Config());
     game.player().setGold(11);
-    const UnitId unitId = game.addUnitToBench(unitFromDefinition("aster_vanguard"));
-    const ItemId itemId = game.addItemToInventory("chainmail");
+    const UnitId unitId = game.addUnitToBench(unitFromDefinition("wallnut"));
+    const ItemId itemId = game.addItemToInventory("pumpkin_shell");
     assert(game.equipItem(itemId, unitId).success);
     assert(game.deployFromBench(0, Position{7, 4}));
     assert(game.saveToFile("stage3_roundtrip.sav").success);
@@ -279,6 +360,8 @@ int main() {
     testRepeatedRecomputeDoesNotRepeatHpDeltaAndStarStats();
     testSynergyDedupAndCombatFreeze();
     testEquipmentStats();
+    testSunSynergyAddsOnlyVictoryGold();
+    testCatalogAndAssetKeysAreValid();
     testLoadFailureLeavesOriginalStateUntouched();
     testSaveLoadRoundTripRestoresAuthoritativeState();
     return 0;

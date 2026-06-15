@@ -96,7 +96,7 @@ public:
     void castSkill(SkillContext& context) override;
 };
 
-class Vanguard : public Unit {
+class PeaBurst : public Unit {
 public:
     using Unit::Unit;
 
@@ -104,7 +104,7 @@ public:
     void castSkill(SkillContext& context) override;
 };
 
-class SparkMage : public Unit {
+class FumeLineCaster : public Unit {
 public:
     using Unit::Unit;
 
@@ -112,7 +112,7 @@ public:
     void castSkill(SkillContext& context) override;
 };
 
-class IrisGuard : public Unit {
+class SunHealer : public Unit {
 public:
     using Unit::Unit;
 

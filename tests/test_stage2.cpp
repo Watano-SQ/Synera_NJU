@@ -29,17 +29,17 @@ std::unique_ptr<Unit> basicPlayer(const std::string& name = "Player",
                                   int range = 1,
                                   int maxMana = 60) {
     return std::make_unique<BasicUnit>(name, Owner::PlayerCtrl, hp, atk, range, maxMana,
-                                       std::vector<std::string>{"Human"}, "player_basic");
+                                       std::vector<std::string>{"shooter"}, "units/peashooter");
 }
 
-std::unique_ptr<Unit> vanguardPlayer(int atk = 40, int range = 1) {
-    return std::make_unique<Vanguard>("Aster Vanguard", Owner::PlayerCtrl, 500, atk, range, 60,
-                                      std::vector<std::string>{"Warrior"}, "player_vanguard");
+std::unique_ptr<Unit> peaBurstPlayer(int atk = 40, int range = 1) {
+    return std::make_unique<PeaBurst>("双重射手", Owner::PlayerCtrl, 500, atk, range, 60,
+                                      std::vector<std::string>{"shooter"}, "units/repeater");
 }
 
-std::unique_ptr<Unit> sparkPlayer(int atk = 40, int range = 2) {
-    return std::make_unique<SparkMage>("Mira Spark", Owner::PlayerCtrl, 500, atk, range, 60,
-                                       std::vector<std::string>{"Mage"}, "player_mage");
+std::unique_ptr<Unit> fumeLinePlayer(int atk = 40, int range = 2) {
+    return std::make_unique<FumeLineCaster>("大喷菇", Owner::PlayerCtrl, 500, atk, range, 60,
+                                            std::vector<std::string>{"fungus"}, "units/fumeshroom");
 }
 
 void deployOne(GameState& game, Position position, std::unique_ptr<Unit> unit = basicPlayer()) {
@@ -135,7 +135,7 @@ void testSpawnFailureIsAtomic() {
 
 void testBasicAttackManaDoesNotCastUntilNextReadyAttack() {
     GameState game(8, 8, 8, fastConfig());
-    UnitId player = game.addUnitToBench(vanguardPlayer(1, 10));
+    UnitId player = game.addUnitToBench(peaBurstPlayer(1, 10));
     assert(game.deployFromBench(0, Position{7, 4}));
     assert(game.startCombat().success);
     const UnitId enemy = game.currentEnemyUnits().front();
@@ -203,7 +203,7 @@ void testMoveConflictLeavesContestedCellEmpty() {
 
 void testResolveRestoresPlayersAndBench() {
     GameState game(8, 8, 8, fastConfig());
-    const UnitId player = game.addUnitToBench(vanguardPlayer(999, 10));
+    const UnitId player = game.addUnitToBench(peaBurstPlayer(999, 10));
     const UnitId bench = game.addUnitToBench(basicPlayer("Reserve", 300, 40, 1));
     assert(game.deployFromBench(0, Position{7, 4}));
     const Position snapshotPosition{7, 4};
@@ -229,7 +229,7 @@ void testResolveRestoresPlayersAndBench() {
 void testGameOverRejectsFurtherActions() {
     GameState game(8, 8, 8, fastConfig());
     game.player().setCurrentRound(3);
-    deployOne(game, Position{7, 4}, sparkPlayer(999, 10));
+    deployOne(game, Position{7, 4}, fumeLinePlayer(999, 10));
 
     assert(game.startCombat().success);
     game.unit(*game.board().occupant(Position{7, 4}))->setMana(60);

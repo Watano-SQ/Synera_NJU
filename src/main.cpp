@@ -11,7 +11,7 @@ namespace {
 
 std::unique_ptr<Unit> makePlayerUnit(const std::string& name, std::vector<std::string> traits) {
     return std::make_unique<BasicUnit>(name, Owner::PlayerCtrl, 320, 35, 1, 60, std::move(traits),
-                                       "player_basic");
+                                       "units/peashooter");
 }
 
 void printUnit(const GameState& game, UnitId id) {
@@ -70,27 +70,27 @@ void printActiveSet(const GameState& game, const std::string& label, const std::
 int main() {
     GameState game;
 
-    const UnitId warrior = game.addUnitToBench(makePlayerUnit("Aster Vanguard", {"Warrior", "Human"}));
-    const UnitId mage = game.addUnitToBench(makePlayerUnit("Mira Spark", {"Mage", "Human"}));
+    const UnitId peashooter = game.addUnitToBench(makePlayerUnit("豌豆射手", {"shooter"}));
+    const UnitId sunflower = game.addUnitToBench(makePlayerUnit("向日葵", {"sun", "healer"}));
 
-    std::cout << "Created player units: #" << warrior << ", #" << mage << "\n";
+    std::cout << "Created player units: #" << peashooter << ", #" << sunflower << "\n";
 
-    const bool placedWarrior = game.deployFromBench(0, Position{7, 3});
-    const bool illegalMagePlacement = game.deployFromBench(1, Position{0, 0});
-    const bool placedMage = game.deployFromBench(1, Position{6, 4});
+    const bool placedPeashooter = game.deployFromBench(0, Position{7, 3});
+    const bool illegalSunflowerPlacement = game.deployFromBench(1, Position{0, 0});
+    const bool placedSunflower = game.deployFromBench(1, Position{6, 4});
 
-    std::cout << "Deploy warrior to player half: " << (placedWarrior ? "ok" : "failed") << "\n";
-    std::cout << "Deploy mage to enemy half: " << (illegalMagePlacement ? "ok" : "rejected") << "\n";
-    std::cout << "Deploy mage to player half: " << (placedMage ? "ok" : "failed") << "\n";
+    std::cout << "Deploy peashooter to player half: " << (placedPeashooter ? "ok" : "failed") << "\n";
+    std::cout << "Deploy sunflower to enemy half: " << (illegalSunflowerPlacement ? "ok" : "rejected") << "\n";
+    std::cout << "Deploy sunflower to player half: " << (placedSunflower ? "ok" : "failed") << "\n";
 
     const std::vector<UnitId> enemies = game.generateEnemiesForRound(1);
-    std::cout << "Generated " << enemies.size() << " enemies for round "
+    std::cout << "Generated " << enemies.size() << " enemies for wave "
               << game.player().currentRound() << ".\n";
 
     printBench(game);
     printBoard(game);
-    printActiveSet(game, "Ar player combat units", game.activePlayerUnits());
-    printActiveSet(game, "Er enemy combat units", game.activeEnemyUnits());
+    printActiveSet(game, "Player combat units", game.activePlayerUnits());
+    printActiveSet(game, "Enemy combat units", game.activeEnemyUnits());
 
     return 0;
 }

@@ -5,6 +5,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <string>
+
 namespace synera::gui {
 
 class AssetManager {

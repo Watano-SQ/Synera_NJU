@@ -13,13 +13,13 @@ namespace {
 
 std::unique_ptr<Unit> playerUnit(const std::string& name = "Player Unit") {
     return std::make_unique<BasicUnit>(name, Owner::PlayerCtrl, 300, 30, 1, 60,
-                                       std::vector<std::string>{"Warrior", "Human"},
-                                       "player_basic");
+                                       std::vector<std::string>{"shooter", "sun"},
+                                       "units/peashooter");
 }
 
 std::unique_ptr<Unit> enemyUnit(const std::string& name = "Enemy Unit") {
     return std::make_unique<BasicUnit>(name, Owner::EnemyCtrl, 200, 22, 1, 60,
-                                       std::vector<std::string>{"Neutral"}, "enemy_basic");
+                                       std::vector<std::string>{"zombie"}, "enemies/zombie");
 }
 
 void testBoardAndHalfRules() {

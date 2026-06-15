@@ -120,6 +120,7 @@ private:
     const ItemInstance* itemInstance(ItemId itemId) const;
     ItemInstance* itemInstance(ItemId itemId);
     void dropVictoryItemIfNeeded();
+    int settlementGoldBonusFromSynergies() const;
     bool ownerHasActiveSynergy(Owner owner, const std::string& trait) const;
     void rebuildOccupancyFromUnitPlacements();
     void clearRuntimeOnlyState();

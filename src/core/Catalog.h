@@ -16,4 +16,7 @@ std::unique_ptr<Unit> createUnitFromDefinition(const UnitDefinition& definition,
 const std::vector<ItemDefinition>& itemCatalog();
 const ItemDefinition* findItemDefinition(const std::string& itemDefId);
 
+const std::vector<TraitDefinition>& traitCatalog();
+const TraitDefinition* findTraitDefinition(const std::string& traitId);
+
 }  // namespace synera
