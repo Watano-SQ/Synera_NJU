@@ -57,6 +57,7 @@ add_executable(synera_gui
     src/gui/EquipmentPanel.cpp
     src/gui/InspectorPanel.cpp
     src/gui/MainWindow.cpp
+    src/gui/PaintUtils.cpp
     src/gui/PlacementController.cpp
     src/gui/ShopPanel.cpp
     src/gui/SynergyPanel.cpp
@@ -74,6 +75,7 @@ add_executable(gui_layout_tests
     src/gui/EquipmentPanel.cpp
     src/gui/InspectorPanel.cpp
     src/gui/MainWindow.cpp
+    src/gui/PaintUtils.cpp
     src/gui/PlacementController.cpp
     src/gui/ShopPanel.cpp
     src/gui/SynergyPanel.cpp

@@ -20,6 +20,7 @@
 namespace synera::gui {
 
 class FlagMeterWidget;
+class StatusIconWidget;
 
 class MainWindow : public QMainWindow {
 public:
@@ -52,10 +53,8 @@ private:
     ShopPanel* shopPanel_ = nullptr;
     EquipmentPanel* equipmentPanel_ = nullptr;
     SynergyPanel* synergyPanel_ = nullptr;
-    QLabel* brainIconLabel_ = nullptr;
+    StatusIconWidget* brainIconWidget_ = nullptr;
     QLabel* hpValueLabel_ = nullptr;
-    QLabel* sunIconLabel_ = nullptr;
-    QLabel* sunValueLabel_ = nullptr;
     FlagMeterWidget* flagMeterWidget_ = nullptr;
     QLabel* roundValueLabel_ = nullptr;
     QLabel* levelValueLabel_ = nullptr;

@@ -1,5 +1,6 @@
 #include "BoardWidget.h"
 
+#include "PaintUtils.h"
 #include "core/Catalog.h"
 
 #include <QApplication>
@@ -24,46 +25,6 @@ constexpr int kMargin = 0;
 QString shortLabel(const Unit& unit, UnitId id) {
     const QString prefix = unit.owner() == Owner::PlayerCtrl ? "P" : "E";
     return prefix + QString::number(id);
-}
-
-BoardHalf halfForRow(const Board& board, int row) {
-    return row < board.rows() / 2 ? BoardHalf::Enemy : BoardHalf::Player;
-}
-
-QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
-    if (sourceSize.isEmpty() || target.isEmpty()) {
-        return QRect();
-    }
-    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
-    return QRect(QPoint(target.center().x() - scaled.width() / 2,
-                       target.center().y() - scaled.height() / 2),
-                 scaled);
-}
-
-void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
-    if (pixmap.isNull() || target.isEmpty()) {
-        return;
-    }
-    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
-}
-
-void drawPixmapCroppedToFill(QPainter& painter, const QRect& target, const QPixmap& pixmap, const QRect& sourceCrop) {
-    if (pixmap.isNull() || target.isEmpty() || sourceCrop.isEmpty()) {
-        return;
-    }
-    QRect crop = sourceCrop;
-    const double sourceRatio = static_cast<double>(sourceCrop.width()) / std::max(1, sourceCrop.height());
-    const double targetRatio = static_cast<double>(target.width()) / std::max(1, target.height());
-    if (sourceRatio > targetRatio) {
-        const int width = static_cast<int>(sourceCrop.height() * targetRatio);
-        crop.setLeft(sourceCrop.left() + (sourceCrop.width() - width) / 2);
-        crop.setWidth(width);
-    } else if (sourceRatio < targetRatio) {
-        const int height = static_cast<int>(sourceCrop.width() / targetRatio);
-        crop.setTop(sourceCrop.top() + (sourceCrop.height() - height) / 2);
-        crop.setHeight(height);
-    }
-    painter.drawPixmap(target, pixmap, crop);
 }
 
 }  // namespace
@@ -124,30 +85,14 @@ void BoardWidget::paintEvent(QPaintEvent*) {
     const QPixmap* playerBackground =
         assets_ != nullptr ? assets_->pixmapFor(boardHalfBackgroundVisualKey(BoardHalf::Player)) : nullptr;
     if (enemyBackground != nullptr) {
-        drawPixmapCroppedToFill(
-            painter,
-            enemyRect,
-            *enemyBackground,
-            QRect(0, 0, enemyBackground->width(), enemyBackground->height() / 2));
+        drawPixmapCroppedToFill(painter, enemyRect, *enemyBackground);
     } else {
         painter.fillRect(enemyRect, QColor("#233044"));
     }
     if (playerBackground != nullptr) {
-        drawPixmapCroppedToFill(
-            painter,
-            playerRect,
-            *playerBackground,
-            QRect(0, playerBackground->height() / 2, playerBackground->width(), playerBackground->height() / 2));
+        drawPixmapCroppedToFill(painter, playerRect, *playerBackground);
     } else {
         painter.fillRect(playerRect, QColor("#7bb65a"));
-    }
-
-    for (int row = 0; row < game_->board().rows(); ++row) {
-        for (int col = 0; col < game_->board().cols(); ++col) {
-            const Position pos{row, col};
-            const QRect cell = cellRect(pos);
-            drawCellBase(painter, pos, cell);
-        }
     }
 
     for (int row = 0; row < game_->board().rows(); ++row) {
@@ -161,7 +106,7 @@ void BoardWidget::paintEvent(QPaintEvent*) {
             const Position pos{row, col};
             const auto id = game_->board().occupant(pos);
             if (id.has_value()) {
-                drawUnit(painter, cellRect(pos).adjusted(5, 5, -5, -5), *id);
+                drawUnit(painter, cellRect(pos), *id);
             }
         }
     }
@@ -171,7 +116,7 @@ void BoardWidget::paintEvent(QPaintEvent*) {
             const Position pos{row, col};
             const auto id = game_->board().occupant(pos);
             if (id.has_value()) {
-                drawSelectionOverlay(painter, cellRect(pos).adjusted(5, 5, -5, -5), *id);
+                drawSelectionOverlay(painter, cellRect(pos).adjusted(8, 6, -8, -12), *id);
             }
         }
     }
@@ -328,21 +273,9 @@ QRect BoardWidget::cellRect(Position position) const {
     return QRect(kMargin + position.col * kCellSize, kMargin + position.row * kCellSize, kCellSize, kCellSize);
 }
 
-void BoardWidget::drawCellBase(QPainter& painter, Position position, const QRect& rect) const {
-    painter.save();
-    const BoardHalf half = halfForRow(game_->board(), position.row);
-    const bool hasBackground =
-        assets_ != nullptr && assets_->pixmapFor(boardHalfBackgroundVisualKey(half)) != nullptr;
-    const QColor fill = half == BoardHalf::Enemy
-                            ? (hasBackground ? QColor(25, 31, 50, 44) : QColor(253, 233, 231, 170))
-                            : (hasBackground ? QColor(117, 183, 83, 36) : QColor(232, 241, 255, 170));
-    painter.fillRect(rect, fill);
-    painter.restore();
-}
-
 void BoardWidget::drawGrid(QPainter& painter, const QRect& rect) const {
     painter.save();
-    painter.setPen(QPen(QColor(83, 92, 104, 120), 1));
+    painter.setPen(QPen(QColor(42, 47, 36, 128), 1));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(rect);
     painter.restore();
@@ -356,16 +289,17 @@ void BoardWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
         return;
     }
 
+    const QRect unitTarget = rect.adjusted(8, 6, -8, -12);
     const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(displayVisualKey(*unit)) : nullptr;
     if (pixmap != nullptr) {
-        drawPixmapAspectFit(painter, rect.adjusted(2, 2, -2, -12), *pixmap);
+        drawPixmapAspectFit(painter, unitTarget, *pixmap);
     } else {
         const QColor color = unit->owner() == Owner::PlayerCtrl ? QColor("#2f6fed") : QColor("#c83f3f");
         painter.setPen(Qt::NoPen);
         painter.setBrush(color);
-        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -12), 6, 6);
+        painter.drawRoundedRect(unitTarget, 6, 6);
         painter.setPen(Qt::white);
-        painter.drawText(rect.adjusted(4, 4, -4, -16), Qt::AlignCenter, shortLabel(*unit, id));
+        painter.drawText(unitTarget, Qt::AlignCenter, shortLabel(*unit, id));
     }
 
     painter.restore();

@@ -1,6 +1,7 @@
 #include "EquipmentPanel.h"
 
 #include "AssetManager.h"
+#include "PaintUtils.h"
 #include "core/Catalog.h"
 
 #include <QHBoxLayout>
@@ -18,26 +19,6 @@
 #include <vector>
 
 namespace synera::gui {
-namespace {
-
-QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
-    if (sourceSize.isEmpty() || target.isEmpty()) {
-        return QRect();
-    }
-    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
-    return QRect(QPoint(target.center().x() - scaled.width() / 2,
-                       target.center().y() - scaled.height() / 2),
-                 scaled);
-}
-
-void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
-    if (pixmap.isNull() || target.isEmpty()) {
-        return;
-    }
-    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
-}
-
-}  // namespace
 
 class EquipmentTrayWidget : public QWidget {
 public:
@@ -50,7 +31,7 @@ public:
     }
 
     QSize sizeHint() const override {
-        return QSize(500, 96);
+        return QSize(660, 92);
     }
 
     QRect trayRectForTesting() const {
@@ -77,9 +58,8 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        painter.fillRect(rect(), QColor("#2f251d"));
         const QRect tray = trayRect();
-        const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline") : nullptr;
+        const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline_tray") : nullptr;
         if (background != nullptr) {
             drawPixmapAspectFit(painter, tray, *background);
         } else {
@@ -103,7 +83,7 @@ protected:
             const QRect slot = slotRect(i);
             if (definition != nullptr && assets_ != nullptr) {
                 if (const QPixmap* icon = assets_->pixmapFor(definition->visualKey)) {
-                    drawPixmapAspectFit(painter, slot.adjusted(6, 6, -6, -6), *icon);
+                    drawPixmapAspectFit(painter, slot, *icon);
                 }
             }
             if (selectedItem_ == instance.itemId) {
@@ -139,29 +119,27 @@ protected:
 
 private:
     QRect trayRect() const {
-        const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline") : nullptr;
-        const QSize sourceSize = background != nullptr && !background->isNull() ? background->size() : QSize(190, 40);
+        const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline_tray") : nullptr;
+        const QSize sourceSize = background != nullptr && !background->isNull() ? background->size() : QSize(190, 38);
         const int maxWidth = std::max(1, width() - 16);
-        const int maxHeight = std::max(1, height() - 8);
+        const int maxHeight = std::max(1, height() - 2);
         const double ratio = static_cast<double>(sourceSize.width()) / std::max(1, sourceSize.height());
-        int trayHeight = std::min(92, maxHeight);
+        int trayHeight = std::min(86, maxHeight);
         int trayWidth = static_cast<int>(std::round(trayHeight * ratio));
         if (trayWidth > maxWidth) {
             trayWidth = maxWidth;
             trayHeight = static_cast<int>(std::round(trayWidth / ratio));
         }
-        return QRect((width() - trayWidth) / 2, (height() - trayHeight) / 2, trayWidth, trayHeight);
+        return QRect((width() - trayWidth) / 2, 0, trayWidth, trayHeight);
     }
 
     QRect slotRect(int index) const {
         const QRect tray = trayRect();
-        const int slotSize = std::clamp((tray.width() - 48 - 3 * 8) / 4, 44, 52);
-        const int rawGap = (tray.width() - 48 - 4 * slotSize) / 3;
-        const int gap = std::clamp(rawGap, 8, 34);
-        const int totalWidth = 4 * slotSize + 3 * gap;
-        const int left = tray.left() + (tray.width() - totalWidth) / 2 + index * (slotSize + gap);
-        const int top = tray.center().y() - slotSize / 2;
-        return QRect(left, top, slotSize, slotSize);
+        static constexpr double kCenters[] = {0.45, 0.58, 0.71, 0.84};
+        constexpr int kSlotSize = 48;
+        const int centerX = tray.left() + static_cast<int>(std::round(tray.width() * kCenters[index]));
+        const int centerY = tray.top() + static_cast<int>(std::round(tray.height() * 0.52));
+        return QRect(centerX - kSlotSize / 2, centerY - kSlotSize / 2, kSlotSize, kSlotSize);
     }
 
     const GameState* game_;
@@ -173,19 +151,20 @@ private:
 
 EquipmentPanel::EquipmentPanel(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
-    setFixedHeight(130);
-    setMinimumWidth(500);
+    setFixedHeight(128);
+    setMinimumWidth(660);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 4, 8, 6);
-    root->setSpacing(4);
+    root->setContentsMargins(8, 2, 8, 4);
+    root->setSpacing(2);
 
-    auto* title = new QLabel("Equipment", this);
+    auto* title = new QLabel(QString::fromUtf8("装备栏"), this);
     QFont titleFont = title->font();
     titleFont.setBold(true);
+    titleFont.setPointSize(std::max(10, titleFont.pointSize()));
     title->setFont(titleFont);
-    title->setFixedHeight(18);
+    title->setFixedHeight(22);
     root->addWidget(title);
 
     trayWidget_ = new EquipmentTrayWidget(game_, assets_, this);
@@ -219,7 +198,7 @@ void EquipmentPanel::refreshFromState() {
     }
 
     const auto inventory = game_->equipmentInventory();
-    const bool useTray = assets_ != nullptr && assets_->pixmapFor("ui/zombieline") != nullptr;
+    const bool useTray = assets_ != nullptr && assets_->pixmapFor("ui/zombieline_tray") != nullptr;
     trayWidget_->setVisible(useTray);
     emptyLabel_->setVisible(!useTray && inventory.empty());
 

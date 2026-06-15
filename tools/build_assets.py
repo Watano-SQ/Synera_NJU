@@ -142,6 +142,30 @@ def save_ui(source: str, output: str) -> None:
         image.save(output_path)
 
 
+def save_plant_shop_sun_slot() -> None:
+    input_path = PICTURES / "植物商店.png"
+    if not input_path.exists():
+        raise FileNotFoundError(f"Missing input asset: {input_path}")
+
+    image = load_first_frame(input_path)
+    # The current source is 446x87; the left 116px keeps the full sun slot
+    # at roughly the same 4:3 ratio used by ShopPanel's 72x54 target.
+    crop = image.crop((0, 0, min(116, image.width), image.height))
+    crop.save(ensure_parent("ui/plant_shop_sun_slot.png"))
+
+
+def save_zombieline_tray() -> None:
+    input_path = PICTURES / "Zombieline.jpg"
+    if not input_path.exists():
+        raise FileNotFoundError(f"Missing input asset: {input_path}")
+
+    with Image.open(input_path) as image:
+        rgb = image.convert("RGB")
+        # Remove the thin unused bottom edge while keeping the visible tray art.
+        cropped = rgb.crop((0, 0, rgb.width, max(1, rgb.height - 2)))
+        cropped.save(ensure_parent("ui/zombieline_tray.jpg"), quality=92)
+
+
 def save_background(source: str, output: str, size: tuple[int, int] = (640, 640)) -> None:
     input_path = PICTURES / source
     if not input_path.exists():
@@ -205,6 +229,8 @@ def main() -> None:
         save_icon(source, output)
     for source, output in UI_ASSETS.items():
         save_ui(source, output)
+    save_plant_shop_sun_slot()
+    save_zombieline_tray()
     for source, output in BACKGROUND_ASSETS.items():
         save_background(source, output)
     for definition_id, source in SHOP_CARD_ASSETS.items():

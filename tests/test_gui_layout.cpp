@@ -44,35 +44,41 @@ int main(int argc, char** argv) {
 
     BenchWidget bench(&game, &assets);
     if (!expect(bench.sizeHint().width() == 512, "bench sizeHint width is 512") ||
-        !expect(bench.sizeHint().height() <= 110, "bench sizeHint height is under 110") ||
-        !expect(bench.minimumHeight() <= 110, "bench minimum height is under 110") ||
-        !expect(bench.maximumHeight() <= 110, "bench maximum height is under 110") ||
+        !expect(bench.sizeHint().height() == 96, "bench sizeHint height is 96") ||
+        !expect(bench.minimumHeight() == 96, "bench minimum height is 96") ||
+        !expect(bench.maximumHeight() == 96, "bench maximum height is 96") ||
         !expect(bench.sizePolicy().horizontalPolicy() == QSizePolicy::Fixed, "bench horizontal policy is fixed") ||
         !expect(bench.sizePolicy().verticalPolicy() == QSizePolicy::Fixed, "bench vertical policy is fixed")) {
         return 1;
     }
 
     ShopPanel shop(&game, &assets);
-    if (!expect(shop.maximumHeight() <= 260, "shop maximum height is under 260") ||
+    if (!expect(shop.maximumHeight() <= 210, "shop maximum height is under 210") ||
+        !expect(shop.minimumWidth() >= 780, "shop minimum width supports merged shop container") ||
         !expect(shop.sizePolicy().verticalPolicy() != QSizePolicy::Expanding, "shop vertical policy is not expanding")) {
         return 1;
     }
 
     EquipmentPanel equipment(&game, &assets);
-    if (!expect(equipment.maximumHeight() <= 140, "equipment maximum height is under 140") ||
+    if (!expect(equipment.maximumHeight() <= 130, "equipment maximum height is under 130") ||
+        !expect(equipment.minimumWidth() >= 660, "equipment minimum width fits the tray") ||
         !expect(equipment.sizePolicy().verticalPolicy() != QSizePolicy::Expanding,
                 "equipment vertical policy is not expanding")) {
         return 1;
     }
     QWidget* tray = equipment.findChild<QWidget*>("equipmentTray");
     if (!expect(tray != nullptr, "equipment tray exists") ||
-        !expect(tray->sizeHint().width() < 620, "equipment tray width is below right column") ||
+        !expect(tray->sizeHint().width() <= 780, "equipment tray width is inside right column") ||
+        !expect(tray->sizeHint().height() <= 92, "equipment tray height leaves room for title") ||
         !expect(tray->sizePolicy().horizontalPolicy() == QSizePolicy::Fixed, "equipment tray horizontal policy is fixed") ||
         !expect(tray->sizePolicy().verticalPolicy() == QSizePolicy::Fixed, "equipment tray vertical policy is fixed")) {
         return 1;
     }
 
     MainWindow window;
+    if (!expect(window.minimumSize() == QSize(1360, 760), "main window minimum is 1360x760")) {
+        return 1;
+    }
     window.show();
     app.processEvents();
     QDir(QString::fromUtf8(SYNERA_PROJECT_ROOT)).mkpath("artifacts");
