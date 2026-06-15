@@ -11,19 +11,39 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QSizePolicy>
 
 #include <algorithm>
 
 namespace synera::gui {
 namespace {
 
-constexpr int kSlotSize = 64;
-constexpr int kGap = 8;
-constexpr int kMargin = 12;
+constexpr int kPreferredSlotSize = 58;
+constexpr int kGap = 4;
+constexpr int kSidePadding = 10;
+constexpr int kBenchWidth = 512;
+constexpr int kBenchHeight = 96;
 
 QString shortLabel(const Unit& unit, UnitId id) {
     const QString prefix = unit.owner() == Owner::PlayerCtrl ? "P" : "E";
     return prefix + QString::number(id);
+}
+
+QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
+    if (sourceSize.isEmpty() || target.isEmpty()) {
+        return QRect();
+    }
+    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
+    return QRect(QPoint(target.center().x() - scaled.width() / 2,
+                       target.center().y() - scaled.height() / 2),
+                 scaled);
+}
+
+void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
+    if (pixmap.isNull() || target.isEmpty()) {
+        return;
+    }
+    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
 }
 
 }  // namespace
@@ -32,12 +52,12 @@ BenchWidget::BenchWidget(const GameState* game, AssetManager* assets, QWidget* p
     : QWidget(parent), game_(game), assets_(assets) {
     setAcceptDrops(true);
     setMouseTracking(true);
-    setMinimumSize(sizeHint());
+    setFixedSize(sizeHint());
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 }
 
 QSize BenchWidget::sizeHint() const {
-    const int slotCount = static_cast<int>(game_->bench().capacity());
-    return QSize(kMargin * 2 + slotCount * kSlotSize + (slotCount - 1) * kGap, kMargin * 2 + kSlotSize);
+    return QSize(kBenchWidth, kBenchHeight);
 }
 
 void BenchWidget::setSelectedUnit(std::optional<UnitId> unitId) {
@@ -65,7 +85,10 @@ void BenchWidget::refreshFromState() {
 void BenchWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor("#5f8f3f"));
+    painter.fillRect(rect(), QColor("#527b36"));
+    painter.setPen(QPen(QColor("#2f4e20"), 2));
+    painter.setBrush(QColor(111, 153, 66, 150));
+    painter.drawRoundedRect(rect().adjusted(3, 3, -3, -3), 8, 8);
 
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         drawCellBase(painter, slotRect(slot));
@@ -228,14 +251,20 @@ std::optional<int> BenchWidget::slotAt(const QPoint& point) const {
 }
 
 QRect BenchWidget::slotRect(int slot) const {
-    return QRect(kMargin + slot * (kSlotSize + kGap), kMargin, kSlotSize, kSlotSize);
+    const int slotCount = std::max(1, static_cast<int>(game_->bench().capacity()));
+    const int maxSlotSize = (width() - kSidePadding * 2 - (slotCount - 1) * kGap) / slotCount;
+    const int slotSize = std::clamp(maxSlotSize, 40, kPreferredSlotSize);
+    const int totalWidth = slotCount * slotSize + (slotCount - 1) * kGap;
+    const int left = (width() - totalWidth) / 2 + slot * (slotSize + kGap);
+    const int top = (height() - slotSize) / 2;
+    return QRect(left, top, slotSize, slotSize);
 }
 
 void BenchWidget::drawCellBase(QPainter& painter, const QRect& rect) const {
     painter.save();
     const QPixmap* frame = assets_ != nullptr ? assets_->pixmapFor("ui/button") : nullptr;
     if (frame != nullptr) {
-        painter.drawPixmap(rect, *frame);
+        drawPixmapAspectFit(painter, rect, *frame);
         painter.fillRect(rect.adjusted(8, 8, -8, -8), QColor(96, 143, 63, 120));
     } else {
         painter.setPen(QPen(QColor("#5f7f2f"), 2));
@@ -263,7 +292,7 @@ void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
 
     const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(displayVisualKey(*unit)) : nullptr;
     if (pixmap != nullptr) {
-        painter.drawPixmap(rect.adjusted(2, 2, -2, -12), *pixmap);
+        drawPixmapAspectFit(painter, rect.adjusted(2, 2, -2, -12), *pixmap);
     } else {
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor("#2f6fed"));

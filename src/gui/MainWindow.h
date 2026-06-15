@@ -19,6 +19,8 @@
 
 namespace synera::gui {
 
+class FlagMeterWidget;
+
 class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
@@ -54,8 +56,7 @@ private:
     QLabel* hpValueLabel_ = nullptr;
     QLabel* sunIconLabel_ = nullptr;
     QLabel* sunValueLabel_ = nullptr;
-    QLabel* flagEmptyLabel_ = nullptr;
-    QLabel* flagFullLabel_ = nullptr;
+    FlagMeterWidget* flagMeterWidget_ = nullptr;
     QLabel* roundValueLabel_ = nullptr;
     QLabel* levelValueLabel_ = nullptr;
     QLabel* populationValueLabel_ = nullptr;

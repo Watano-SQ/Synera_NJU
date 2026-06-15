@@ -3,28 +3,58 @@
 #include "AssetManager.h"
 #include "core/Catalog.h"
 
+#include <QHBoxLayout>
 #include <QIcon>
 #include <QLayoutItem>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSize>
+#include <QSizePolicy>
+#include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 #include <vector>
 
 namespace synera::gui {
+namespace {
+
+QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
+    if (sourceSize.isEmpty() || target.isEmpty()) {
+        return QRect();
+    }
+    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
+    return QRect(QPoint(target.center().x() - scaled.width() / 2,
+                       target.center().y() - scaled.height() / 2),
+                 scaled);
+}
+
+void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
+    if (pixmap.isNull() || target.isEmpty()) {
+        return;
+    }
+    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
+}
+
+}  // namespace
 
 class EquipmentTrayWidget : public QWidget {
 public:
     EquipmentTrayWidget(const GameState* game, AssetManager* assets, QWidget* parent = nullptr)
         : QWidget(parent), game_(game), assets_(assets) {
-        setMinimumSize(sizeHint());
+        setObjectName("equipmentTray");
+        setFixedSize(sizeHint());
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         setMouseTracking(true);
     }
 
     QSize sizeHint() const override {
-        return QSize(320, 92);
+        return QSize(500, 96);
+    }
+
+    QRect trayRectForTesting() const {
+        return trayRect();
     }
 
     void setSelectedItem(std::optional<ItemId> itemId) {
@@ -47,39 +77,44 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
 
+        painter.fillRect(rect(), QColor("#2f251d"));
+        const QRect tray = trayRect();
         const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline") : nullptr;
         if (background != nullptr) {
-            painter.drawPixmap(rect(), *background);
+            drawPixmapAspectFit(painter, tray, *background);
         } else {
-            painter.fillRect(rect(), QColor("#47372b"));
+            painter.setPen(QPen(QColor("#211811"), 2));
+            painter.setBrush(QColor("#594233"));
+            painter.drawRoundedRect(tray, 8, 8);
         }
 
-        const int slotCount = std::max(4, static_cast<int>(inventory_.size()));
-        for (int i = 0; i < slotCount; ++i) {
-            const QRect slot = slotRect(i, slotCount);
-            painter.setPen(QPen(QColor(24, 18, 12, 180), 2));
-            painter.setBrush(QColor(250, 231, 167, 90));
-            painter.drawRoundedRect(slot, 6, 6);
+        constexpr int kVisibleSlots = 4;
+        for (int i = 0; i < kVisibleSlots; ++i) {
+            const QRect slot = slotRect(i);
+            painter.setPen(QPen(QColor(24, 18, 12, 200), 2));
+            painter.setBrush(QColor(250, 231, 167, 72));
+            painter.drawRoundedRect(slot, 7, 7);
         }
 
-        for (int i = 0; i < static_cast<int>(inventory_.size()); ++i) {
+        const int visibleItems = std::min(kVisibleSlots, static_cast<int>(inventory_.size()));
+        for (int i = 0; i < visibleItems; ++i) {
             const ItemInstance& instance = inventory_[static_cast<std::size_t>(i)];
             const ItemDefinition* definition = findItemDefinition(instance.itemDefId);
-            const QRect slot = slotRect(i, slotCount);
+            const QRect slot = slotRect(i);
             if (definition != nullptr && assets_ != nullptr) {
                 if (const QPixmap* icon = assets_->pixmapFor(definition->visualKey)) {
-                    painter.drawPixmap(slot.adjusted(7, 7, -7, -7), *icon);
+                    drawPixmapAspectFit(painter, slot.adjusted(6, 6, -6, -6), *icon);
                 }
             }
             if (selectedItem_ == instance.itemId) {
                 painter.setPen(QPen(QColor("#ffd34e"), 3));
                 painter.setBrush(QColor(255, 211, 78, 55));
-                painter.drawRoundedRect(slot.adjusted(1, 1, -1, -1), 6, 6);
+                painter.drawRoundedRect(slot.adjusted(1, 1, -1, -1), 7, 7);
             }
         }
 
         if (game_->phase() != GamePhase::Prep) {
-            painter.fillRect(rect(), QColor(0, 0, 0, 60));
+            painter.fillRect(tray, QColor(0, 0, 0, 60));
         }
     }
 
@@ -88,9 +123,10 @@ protected:
             return;
         }
 
-        const int slotCount = std::max(4, static_cast<int>(inventory_.size()));
-        for (int i = 0; i < static_cast<int>(inventory_.size()); ++i) {
-            if (slotRect(i, slotCount).contains(event->pos())) {
+        constexpr int kVisibleSlots = 4;
+        const int visibleItems = std::min(kVisibleSlots, static_cast<int>(inventory_.size()));
+        for (int i = 0; i < visibleItems; ++i) {
+            if (slotRect(i).contains(event->pos())) {
                 selectedItem_ = inventory_[static_cast<std::size_t>(i)].itemId;
                 if (itemSelectedCallback_) {
                     itemSelectedCallback_(selectedItem_);
@@ -102,14 +138,29 @@ protected:
     }
 
 private:
-    QRect slotRect(int index, int slotCount) const {
-        constexpr int gap = 8;
-        const int availableWidth = std::max(1, width() - 28);
-        const int rawSize = (availableWidth - gap * (slotCount - 1)) / std::max(1, slotCount);
-        const int slotSize = std::clamp(rawSize, 30, 48);
-        const int totalWidth = slotCount * slotSize + (slotCount - 1) * gap;
-        const int left = (width() - totalWidth) / 2 + index * (slotSize + gap);
-        const int top = (height() - slotSize) / 2;
+    QRect trayRect() const {
+        const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline") : nullptr;
+        const QSize sourceSize = background != nullptr && !background->isNull() ? background->size() : QSize(190, 40);
+        const int maxWidth = std::max(1, width() - 16);
+        const int maxHeight = std::max(1, height() - 8);
+        const double ratio = static_cast<double>(sourceSize.width()) / std::max(1, sourceSize.height());
+        int trayHeight = std::min(92, maxHeight);
+        int trayWidth = static_cast<int>(std::round(trayHeight * ratio));
+        if (trayWidth > maxWidth) {
+            trayWidth = maxWidth;
+            trayHeight = static_cast<int>(std::round(trayWidth / ratio));
+        }
+        return QRect((width() - trayWidth) / 2, (height() - trayHeight) / 2, trayWidth, trayHeight);
+    }
+
+    QRect slotRect(int index) const {
+        const QRect tray = trayRect();
+        const int slotSize = std::clamp((tray.width() - 48 - 3 * 8) / 4, 44, 52);
+        const int rawGap = (tray.width() - 48 - 4 * slotSize) / 3;
+        const int gap = std::clamp(rawGap, 8, 34);
+        const int totalWidth = 4 * slotSize + 3 * gap;
+        const int left = tray.left() + (tray.width() - totalWidth) / 2 + index * (slotSize + gap);
+        const int top = tray.center().y() - slotSize / 2;
         return QRect(left, top, slotSize, slotSize);
     }
 
@@ -122,18 +173,29 @@ private:
 
 EquipmentPanel::EquipmentPanel(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
+    setFixedHeight(130);
+    setMinimumWidth(500);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
     auto* root = new QVBoxLayout(this);
-    auto* title = new QLabel("装备栏", this);
+    root->setContentsMargins(8, 4, 8, 6);
+    root->setSpacing(4);
+
+    auto* title = new QLabel("Equipment", this);
     QFont titleFont = title->font();
     titleFont.setBold(true);
     title->setFont(titleFont);
+    title->setFixedHeight(18);
     root->addWidget(title);
 
     trayWidget_ = new EquipmentTrayWidget(game_, assets_, this);
-    root->addWidget(trayWidget_);
+    root->addWidget(trayWidget_, 0, Qt::AlignHCenter | Qt::AlignTop);
 
     emptyLabel_ = new QLabel("-", this);
+    emptyLabel_->setAlignment(Qt::AlignCenter);
     itemLayout_ = new QVBoxLayout();
+    itemLayout_->setContentsMargins(0, 0, 0, 0);
+    itemLayout_->setSpacing(4);
     root->addLayout(itemLayout_);
     root->addWidget(emptyLabel_);
     refreshFromState();
@@ -172,6 +234,7 @@ void EquipmentPanel::refreshFromState() {
         const QString label = definition != nullptr ? QString::fromStdString(definition->name)
                                                     : QString::fromStdString(instance.itemDefId);
         auto* button = new QPushButton(label + (selectedItem_ == instance.itemId ? " *" : ""), this);
+        button->setFixedHeight(28);
         if (definition != nullptr && assets_ != nullptr) {
             const QPixmap* pixmap = assets_->pixmapFor(definition->visualKey);
             if (pixmap != nullptr) {

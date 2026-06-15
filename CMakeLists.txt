@@ -65,6 +65,22 @@ add_executable(synera_gui
 target_link_libraries(synera_gui PRIVATE synera_core Qt6::Widgets)
 target_compile_definitions(synera_gui PRIVATE SYNERA_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
 
+add_executable(gui_layout_tests
+    tests/test_gui_layout.cpp
+    src/gui/AssetManager.cpp
+    src/gui/BenchWidget.cpp
+    src/gui/BoardWidget.cpp
+    src/gui/DragData.cpp
+    src/gui/EquipmentPanel.cpp
+    src/gui/InspectorPanel.cpp
+    src/gui/MainWindow.cpp
+    src/gui/PlacementController.cpp
+    src/gui/ShopPanel.cpp
+    src/gui/SynergyPanel.cpp
+)
+target_link_libraries(gui_layout_tests PRIVATE synera_core Qt6::Widgets)
+target_compile_definitions(gui_layout_tests PRIVATE SYNERA_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+
 add_custom_command(TARGET synera_gui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets"

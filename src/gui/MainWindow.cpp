@@ -4,12 +4,17 @@
 #include "core/Unit.h"
 
 #include <QFileDialog>
+#include <QFrame>
 #include <QHBoxLayout>
+#include <QPainter>
 #include <QPixmap>
+#include <QScrollArea>
 #include <QSize>
+#include <QSizePolicy>
 #include <QStatusBar>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <memory>
 
 namespace synera::gui {
@@ -20,16 +25,108 @@ std::unique_ptr<Unit> makeCatalogUnit(const std::string& definitionId) {
     return definition != nullptr ? createUnitFromDefinition(*definition, Owner::PlayerCtrl) : nullptr;
 }
 
+QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
+    if (sourceSize.isEmpty() || target.isEmpty()) {
+        return QRect();
+    }
+    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
+    return QRect(QPoint(target.center().x() - scaled.width() / 2,
+                       target.center().y() - scaled.height() / 2),
+                 scaled);
+}
+
+void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
+    if (pixmap.isNull() || target.isEmpty()) {
+        return;
+    }
+    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
+}
+
 void setStatusIcon(QLabel* label, AssetManager& assets, const std::string& visualKey, QSize size) {
+    label->setFixedSize(size);
+    label->setAlignment(Qt::AlignCenter);
     const QPixmap* pixmap = assets.pixmapFor(visualKey);
     if (pixmap != nullptr) {
         label->setPixmap(pixmap->scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        label->setFixedSize(size);
-        label->setAlignment(Qt::AlignCenter);
     }
 }
 
+void styleStatusValue(QLabel* label) {
+    QFont font = label->font();
+    font.setBold(true);
+    font.setPointSize(std::max(10, font.pointSize() + 1));
+    label->setFont(font);
+    label->setMinimumWidth(34);
+}
+
+QWidget* makeStatusGroup(QWidget* parent, QLabel* icon, QLabel* value) {
+    auto* group = new QWidget(parent);
+    group->setFixedHeight(34);
+    group->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto* layout = new QHBoxLayout(group);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(5);
+    layout->addWidget(icon, 0, Qt::AlignVCenter);
+    layout->addWidget(value, 0, Qt::AlignVCenter);
+    return group;
+}
+
+void styleActionButton(QPushButton* button) {
+    button->setFixedHeight(30);
+    button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+}
+
 }  // namespace
+
+class FlagMeterWidget : public QWidget {
+public:
+    explicit FlagMeterWidget(AssetManager* assets, QWidget* parent = nullptr) : QWidget(parent), assets_(assets) {
+        setFixedSize(120, 16);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    }
+
+    void setProgress(int value, int maximum) {
+        value_ = std::max(0, value);
+        maximum_ = std::max(1, maximum);
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QRect meter = rect();
+        const QPixmap* empty = assets_ != nullptr ? assets_->pixmapFor("ui/flag_meter_empty") : nullptr;
+        const QPixmap* full = assets_ != nullptr ? assets_->pixmapFor("ui/flag_meter_full") : nullptr;
+
+        if (empty != nullptr) {
+            drawPixmapAspectFit(painter, meter, *empty);
+        } else {
+            painter.setPen(QPen(QColor("#3a332a"), 1));
+            painter.setBrush(QColor("#5e554a"));
+            painter.drawRoundedRect(meter.adjusted(0, 0, -1, -1), 4, 4);
+        }
+
+        const int fillWidth = meter.width() * std::clamp(value_, 0, maximum_) / maximum_;
+        if (fillWidth <= 0) {
+            return;
+        }
+
+        painter.save();
+        painter.setClipRect(QRect(meter.left(), meter.top(), fillWidth, meter.height()));
+        if (full != nullptr) {
+            drawPixmapAspectFit(painter, meter, *full);
+        } else {
+            painter.fillRect(QRect(meter.left(), meter.top(), fillWidth, meter.height()), QColor("#ffd34e"));
+        }
+        painter.restore();
+    }
+
+private:
+    AssetManager* assets_;
+    int value_ = 1;
+    int maximum_ = 5;
+};
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -39,68 +136,125 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);
+    root->setContentsMargins(8, 8, 8, 8);
+    root->setSpacing(8);
 
-    auto* statusRow = new QHBoxLayout();
-    brainIconLabel_ = new QLabel(this);
-    hpValueLabel_ = new QLabel(this);
-    sunIconLabel_ = new QLabel(this);
-    sunValueLabel_ = new QLabel(this);
-    flagEmptyLabel_ = new QLabel(this);
-    flagFullLabel_ = new QLabel(this);
-    roundValueLabel_ = new QLabel(this);
-    levelValueLabel_ = new QLabel(this);
-    populationValueLabel_ = new QLabel(this);
-    phaseLabel_ = new QLabel(this);
-    upgradeButton_ = new QPushButton("升级人口", this);
-    saveButton_ = new QPushButton("存档", this);
-    loadButton_ = new QPushButton("读档", this);
-    startCombatButton_ = new QPushButton("开始守家", this);
-    resolveButton_ = new QPushButton("结算", this);
+    auto* statusBarWidget = new QWidget(central);
+    statusBarWidget->setFixedHeight(44);
+    statusBarWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    auto* statusRow = new QHBoxLayout(statusBarWidget);
+    statusRow->setContentsMargins(8, 4, 8, 4);
+    statusRow->setSpacing(8);
+
+    brainIconLabel_ = new QLabel(statusBarWidget);
+    hpValueLabel_ = new QLabel(statusBarWidget);
+    sunIconLabel_ = new QLabel(statusBarWidget);
+    sunValueLabel_ = new QLabel(statusBarWidget);
+    flagMeterWidget_ = new FlagMeterWidget(&assets_, statusBarWidget);
+    roundValueLabel_ = new QLabel(statusBarWidget);
+    levelValueLabel_ = new QLabel(statusBarWidget);
+    populationValueLabel_ = new QLabel(statusBarWidget);
+    phaseLabel_ = new QLabel(statusBarWidget);
+    upgradeButton_ = new QPushButton("Level Up", statusBarWidget);
+    saveButton_ = new QPushButton("Save", statusBarWidget);
+    loadButton_ = new QPushButton("Load", statusBarWidget);
+    startCombatButton_ = new QPushButton("Start", statusBarWidget);
+    resolveButton_ = new QPushButton("Resolve", statusBarWidget);
 
     setStatusIcon(brainIconLabel_, assets_, "ui/brain", QSize(28, 28));
-    setStatusIcon(sunIconLabel_, assets_, "ui/sun_counter", QSize(30, 30));
-    setStatusIcon(flagEmptyLabel_, assets_, "ui/flag_meter_empty", QSize(52, 22));
-    setStatusIcon(flagFullLabel_, assets_, "ui/flag_meter_full", QSize(52, 22));
-    statusRow->addWidget(brainIconLabel_);
-    statusRow->addWidget(hpValueLabel_);
+    setStatusIcon(sunIconLabel_, assets_, "ui/sun_counter", QSize(44, 22));
+    styleStatusValue(hpValueLabel_);
+    styleStatusValue(sunValueLabel_);
+    styleStatusValue(roundValueLabel_);
+    styleStatusValue(levelValueLabel_);
+    styleStatusValue(populationValueLabel_);
+    styleStatusValue(phaseLabel_);
+
+    styleActionButton(upgradeButton_);
+    styleActionButton(saveButton_);
+    styleActionButton(loadButton_);
+    styleActionButton(startCombatButton_);
+    styleActionButton(resolveButton_);
+
+    auto* hpGroup = makeStatusGroup(statusBarWidget, brainIconLabel_, hpValueLabel_);
+    auto* sunGroup = makeStatusGroup(statusBarWidget, sunIconLabel_, sunValueLabel_);
+    auto* waveGroup = new QWidget(statusBarWidget);
+    waveGroup->setFixedHeight(34);
+    waveGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto* waveLayout = new QHBoxLayout(waveGroup);
+    waveLayout->setContentsMargins(0, 0, 0, 0);
+    waveLayout->setSpacing(6);
+    waveLayout->addWidget(flagMeterWidget_, 0, Qt::AlignVCenter);
+    waveLayout->addWidget(roundValueLabel_, 0, Qt::AlignVCenter);
+
+    statusRow->addWidget(hpGroup);
+    statusRow->addWidget(sunGroup);
+    statusRow->addWidget(waveGroup);
     statusRow->addSpacing(8);
-    statusRow->addWidget(sunIconLabel_);
-    statusRow->addWidget(sunValueLabel_);
-    statusRow->addSpacing(8);
-    statusRow->addWidget(flagEmptyLabel_);
-    statusRow->addWidget(flagFullLabel_);
-    statusRow->addWidget(roundValueLabel_);
-    statusRow->addSpacing(8);
+    statusRow->addWidget(phaseLabel_);
     statusRow->addWidget(levelValueLabel_);
     statusRow->addWidget(populationValueLabel_);
     statusRow->addStretch();
-    statusRow->addWidget(phaseLabel_);
     statusRow->addWidget(upgradeButton_);
     statusRow->addWidget(saveButton_);
     statusRow->addWidget(loadButton_);
     statusRow->addWidget(startCombatButton_);
     statusRow->addWidget(resolveButton_);
-    root->addLayout(statusRow);
+    root->addWidget(statusBarWidget);
 
     auto* contentRow = new QHBoxLayout();
-    auto* leftColumn = new QVBoxLayout();
-    boardWidget_ = new BoardWidget(&game_, &assets_, this);
-    benchWidget_ = new BenchWidget(&game_, &assets_, this);
-    inspectorPanel_ = new InspectorPanel(&game_, this);
-    shopPanel_ = new ShopPanel(&game_, &assets_, this);
-    equipmentPanel_ = new EquipmentPanel(&game_, &assets_, this);
-    synergyPanel_ = new SynergyPanel(&game_, &assets_, this);
+    contentRow->setContentsMargins(0, 0, 0, 0);
+    contentRow->setSpacing(10);
 
-    leftColumn->addWidget(boardWidget_, 0, Qt::AlignLeft);
-    leftColumn->addWidget(benchWidget_, 0, Qt::AlignLeft);
-    contentRow->addLayout(leftColumn);
-    auto* rightColumn = new QVBoxLayout();
-    rightColumn->addWidget(shopPanel_);
-    rightColumn->addWidget(equipmentPanel_);
-    rightColumn->addWidget(synergyPanel_);
-    rightColumn->addWidget(inspectorPanel_, 1);
-    contentRow->addLayout(rightColumn, 1);
-    root->addLayout(contentRow);
+    auto* leftContainer = new QWidget(central);
+    leftContainer->setFixedWidth(540);
+    leftContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    auto* leftColumn = new QVBoxLayout(leftContainer);
+    leftColumn->setContentsMargins(14, 0, 14, 0);
+    leftColumn->setSpacing(8);
+
+    auto* rightContainer = new QWidget(central);
+    rightContainer->setFixedWidth(620);
+    rightContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    auto* rightColumn = new QVBoxLayout(rightContainer);
+    rightColumn->setContentsMargins(0, 0, 0, 0);
+    rightColumn->setSpacing(8);
+
+    boardWidget_ = new BoardWidget(&game_, &assets_, leftContainer);
+    benchWidget_ = new BenchWidget(&game_, &assets_, leftContainer);
+    inspectorPanel_ = new InspectorPanel(&game_, rightContainer);
+    shopPanel_ = new ShopPanel(&game_, &assets_, rightContainer);
+    equipmentPanel_ = new EquipmentPanel(&game_, &assets_, rightContainer);
+    synergyPanel_ = new SynergyPanel(&game_, &assets_, rightContainer);
+
+    leftColumn->addWidget(boardWidget_, 0, Qt::AlignHCenter | Qt::AlignTop);
+    leftColumn->addWidget(benchWidget_, 0, Qt::AlignHCenter | Qt::AlignTop);
+    leftColumn->addStretch();
+
+    auto* synergyScroll = new QScrollArea(rightContainer);
+    synergyScroll->setWidgetResizable(true);
+    synergyScroll->setFixedHeight(176);
+    synergyScroll->setFrameShape(QFrame::NoFrame);
+    synergyScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    synergyScroll->setWidget(synergyPanel_);
+
+    auto* inspectorScroll = new QScrollArea(rightContainer);
+    inspectorScroll->setWidgetResizable(true);
+    inspectorScroll->setMinimumHeight(220);
+    inspectorScroll->setFrameShape(QFrame::NoFrame);
+    inspectorScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    inspectorScroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    inspectorScroll->setWidget(inspectorPanel_);
+
+    rightColumn->addWidget(shopPanel_, 0, Qt::AlignTop);
+    rightColumn->addWidget(equipmentPanel_, 0, Qt::AlignTop);
+    rightColumn->addWidget(synergyScroll, 0, Qt::AlignTop);
+    rightColumn->addWidget(inspectorScroll, 1);
+
+    contentRow->addWidget(leftContainer, 0, Qt::AlignTop);
+    contentRow->addWidget(rightContainer, 0, Qt::AlignTop);
+    contentRow->addStretch();
+    root->addLayout(contentRow, 1);
     setCentralWidget(central);
 
     boardWidget_->setUnitSelectedCallback([this](std::optional<UnitId> id) { setSelectedUnit(id); });
@@ -124,8 +278,9 @@ MainWindow::MainWindow(QWidget* parent)
     combatTimer_->setInterval(16);
     connect(combatTimer_, &QTimer::timeout, this, &MainWindow::advanceCombat);
 
-    setWindowTitle("植物自走棋 - PvZ Auto Arena");
-    resize(1180, 820);
+    setWindowTitle("Synera - PvZ Auto Arena");
+    setMinimumSize(1188, 760);
+    resize(1188, 760);
     refreshFromState();
     statusBar()->showMessage("Ready");
 }
@@ -137,11 +292,12 @@ void MainWindow::refreshFromState() {
 
     hpValueLabel_->setText(QString::number(game_.player().hp()));
     sunValueLabel_->setText(QString::number(game_.player().gold()));
-    roundValueLabel_->setText(QString("波次 %1").arg(game_.player().currentRound()));
-    levelValueLabel_->setText(QString("等级 %1").arg(game_.player().level()));
+    roundValueLabel_->setText(QString("Wave %1").arg(game_.player().currentRound()));
+    flagMeterWidget_->setProgress(std::clamp(game_.player().currentRound(), 1, 5), 5);
+    levelValueLabel_->setText(QString("Level %1").arg(game_.player().level()));
     populationValueLabel_->setText(
-        QString("人口 %1/%2").arg(game_.deployedPlayerUnitCount()).arg(game_.player().unitCap()));
-    phaseLabel_->setText("阶段: " + phaseText());
+        QString("Pop %1/%2").arg(game_.deployedPlayerUnitCount()).arg(game_.player().unitCap()));
+    phaseLabel_->setText("Phase: " + phaseText());
 
     const bool canDrag = game_.phase() == GamePhase::Prep;
     const bool canManage = game_.phase() == GamePhase::Prep;
@@ -282,13 +438,13 @@ void MainWindow::resolveRound() {
 QString MainWindow::phaseText() const {
     switch (game_.phase()) {
         case GamePhase::Prep:
-            return "准备";
+            return "Prep";
         case GamePhase::Combat:
-            return "守家";
+            return "Combat";
         case GamePhase::Resolve:
-            return "结算";
+            return "Resolve";
         case GamePhase::GameOver:
-            return "结束";
+            return "Game Over";
     }
     return QString::fromStdString(toString(game_.phase()));
 }

@@ -3,11 +3,12 @@
 #include "AssetManager.h"
 #include "core/Catalog.h"
 
-#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QIcon>
 #include <QPainter>
 #include <QPixmap>
 #include <QSize>
+#include <QSizePolicy>
 #include <QStringList>
 #include <QVBoxLayout>
 
@@ -16,6 +17,23 @@
 
 namespace synera::gui {
 namespace {
+
+QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
+    if (sourceSize.isEmpty() || target.isEmpty()) {
+        return QRect();
+    }
+    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
+    return QRect(QPoint(target.center().x() - scaled.width() / 2,
+                       target.center().y() - scaled.height() / 2),
+                 scaled);
+}
+
+void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
+    if (pixmap.isNull() || target.isEmpty()) {
+        return;
+    }
+    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
+}
 
 QString traitsText(const UnitDefinition& definition) {
     QStringList traits;
@@ -26,22 +44,19 @@ QString traitsText(const UnitDefinition& definition) {
     return traits.join(", ");
 }
 
-QPixmap scaledCentered(const QPixmap& source, QSize size) {
-    return source.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-}
-
 }  // namespace
 
 class ShopCardButton : public QPushButton {
 public:
     explicit ShopCardButton(QWidget* parent = nullptr) : QPushButton(parent) {
         setFlat(true);
-        setMinimumSize(sizeHint());
+        setFixedSize(sizeHint());
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         setCursor(Qt::PointingHandCursor);
     }
 
     QSize sizeHint() const override {
-        return QSize(104, 148);
+        return QSize(112, 86);
     }
 
     void setOffer(QString title,
@@ -70,51 +85,48 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing, true);
 
         const QRect body = rect().adjusted(2, 2, -2, -2);
-        painter.setPen(QPen(isEnabled() ? QColor("#6f4d21") : QColor("#6b6258"), 2));
-        painter.setBrush(isEnabled() ? QColor("#efe0ad") : QColor("#9c9587"));
+        painter.setPen(QPen(isEnabled() ? QColor("#6f4d21") : QColor("#4d453b"), 2));
+        painter.setBrush(isEnabled() ? QColor("#d7b061") : QColor("#5f5a51"));
         painter.drawRoundedRect(body, 7, 7);
 
         if (!hasOffer_) {
-            painter.setPen(QColor("#5f5a51"));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(24, 21, 18, 170));
+            painter.drawRoundedRect(body.adjusted(6, 6, -6, -22), 5, 5);
+            painter.setPen(QColor("#8a8173"));
             painter.drawText(body, Qt::AlignCenter, "-");
             return;
         }
 
-        const QRect cardRect = body.adjusted(8, 8, -8, -36);
+        const QRect cardRect(body.left() + 3, body.top() + 3, body.width() - 6, 64);
         if (!card_.isNull()) {
-            const QPixmap scaled = scaledCentered(card_, cardRect.size());
-            const QPoint topLeft(cardRect.center().x() - scaled.width() / 2, cardRect.center().y() - scaled.height() / 2);
-            painter.drawPixmap(topLeft, scaled);
+            drawPixmapAspectFit(painter, cardRect, card_);
         } else {
             painter.setPen(QPen(QColor("#705023"), 1));
             painter.setBrush(QColor("#f5e8b8"));
             painter.drawRoundedRect(cardRect, 5, 5);
             if (!fallbackIcon_.isNull()) {
-                const QRect iconRect(cardRect.left() + 12, cardRect.top() + 12, cardRect.width() - 24, 48);
-                const QPixmap scaled = scaledCentered(fallbackIcon_, iconRect.size());
-                const QPoint topLeft(iconRect.center().x() - scaled.width() / 2, iconRect.center().y() - scaled.height() / 2);
-                painter.drawPixmap(topLeft, scaled);
+                drawPixmapAspectFit(painter, cardRect.adjusted(20, 8, -20, -12), fallbackIcon_);
             }
             painter.setPen(QColor("#2d2719"));
-            painter.drawText(cardRect.adjusted(4, 62, -4, -18), Qt::AlignHCenter | Qt::TextWordWrap, title_);
+            painter.drawText(cardRect.adjusted(4, 42, -4, -2), Qt::AlignHCenter | Qt::TextWordWrap, title_);
             painter.setPen(QColor("#5f5134"));
-            painter.drawText(cardRect.adjusted(4, cardRect.height() - 18, -4, -2), Qt::AlignCenter, traits_);
+            painter.drawText(cardRect.adjusted(4, cardRect.height() - 16, -4, -2), Qt::AlignCenter, traits_);
         }
 
         if (!isEnabled()) {
-            painter.fillRect(cardRect, QColor(35, 35, 35, 95));
+            painter.fillRect(cardRect, QColor(35, 35, 35, 65));
         }
 
-        const QRect priceRect(body.left() + 10, body.bottom() - 28, body.width() - 20, 22);
+        const QRect priceRect(body.right() - 50, body.bottom() - 18, 46, 16);
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(47, 36, 16, 190));
-        painter.drawRoundedRect(priceRect, 4, 4);
-        const QRect sunRect(priceRect.left() + 6, priceRect.top() + 2, 18, 18);
+        painter.drawRoundedRect(priceRect, 3, 3);
         if (!sunIcon_.isNull()) {
-            painter.drawPixmap(sunRect, sunIcon_);
+            drawPixmapAspectFit(painter, QRect(priceRect.left() + 3, priceRect.top() + 2, 16, 12), sunIcon_);
         }
         painter.setPen(QColor("#fff4b8"));
-        painter.drawText(priceRect.adjusted(28, 0, -6, 0), Qt::AlignVCenter | Qt::AlignRight, QString::number(cost_));
+        painter.drawText(priceRect.adjusted(20, 0, -4, 0), Qt::AlignVCenter | Qt::AlignRight, QString::number(cost_));
     }
 
 private:
@@ -129,37 +141,35 @@ private:
 
 ShopPanel::ShopPanel(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
+    setFixedHeight(188);
+    setMinimumWidth(600);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
     auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(8, 6, 8, 6);
     root->setSpacing(8);
 
-    titleArt_ = new QLabel("戴夫的植物商店", this);
+    auto* titleRow = new QHBoxLayout();
+    titleRow->setContentsMargins(0, 0, 0, 0);
+    titleRow->setSpacing(8);
+
+    titleArt_ = new QLabel("Plant Shop", this);
     titleArt_->setAlignment(Qt::AlignCenter);
-    titleArt_->setMinimumHeight(44);
+    titleArt_->setFixedSize(260, 52);
     QFont titleFont = titleArt_->font();
     titleFont.setBold(true);
     titleArt_->setFont(titleFont);
     if (assets_ != nullptr) {
         const QPixmap* pixmap = assets_->pixmapFor("ui/plant_shop");
         if (pixmap != nullptr) {
-            titleArt_->setPixmap(pixmap->scaled(220, 56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            titleArt_->setPixmap(pixmap->scaled(titleArt_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
     }
-    root->addWidget(titleArt_);
 
-    auto* grid = new QGridLayout();
-    grid->setSpacing(8);
-    for (std::size_t i = 0; i < offerCards_.size(); ++i) {
-        offerCards_[i] = new ShopCardButton(this);
-        connect(offerCards_[i], &QPushButton::clicked, this, [this, i]() {
-            if (purchaseCallback_) {
-                purchaseCallback_(i);
-            }
-        });
-        grid->addWidget(offerCards_[i], static_cast<int>(i / 2), static_cast<int>(i % 2));
-    }
-    root->addLayout(grid);
-
-    refreshButton_ = new QPushButton("刷新 2", this);
+    refreshButton_ = new QPushButton("Refresh 2", this);
+    refreshButton_->setFixedHeight(30);
+    refreshButton_->setMinimumWidth(116);
+    refreshButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     if (assets_ != nullptr) {
         if (const QPixmap* pixmap = assets_->pixmapFor("ui/button")) {
             refreshButton_->setIcon(QIcon(*pixmap));
@@ -171,7 +181,26 @@ ShopPanel::ShopPanel(const GameState* game, AssetManager* assets, QWidget* paren
             refreshCallback_();
         }
     });
-    root->addWidget(refreshButton_);
+
+    titleRow->addWidget(titleArt_, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    titleRow->addStretch();
+    titleRow->addWidget(refreshButton_, 0, Qt::AlignRight | Qt::AlignVCenter);
+    root->addLayout(titleRow);
+
+    auto* cardRow = new QHBoxLayout();
+    cardRow->setContentsMargins(0, 0, 0, 0);
+    cardRow->setSpacing(6);
+    for (std::size_t i = 0; i < offerCards_.size(); ++i) {
+        offerCards_[i] = new ShopCardButton(this);
+        connect(offerCards_[i], &QPushButton::clicked, this, [this, i]() {
+            if (purchaseCallback_) {
+                purchaseCallback_(i);
+            }
+        });
+        cardRow->addWidget(offerCards_[i], 0, Qt::AlignLeft | Qt::AlignTop);
+    }
+    cardRow->addStretch();
+    root->addLayout(cardRow);
     refreshFromState();
 }
 
