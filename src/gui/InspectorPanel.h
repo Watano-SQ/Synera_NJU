@@ -9,9 +9,12 @@
 
 namespace synera::gui {
 
+class AssetManager;
+class InspectorIconWidget;
+
 class InspectorPanel : public QWidget {
 public:
-    explicit InspectorPanel(const GameState* game, QWidget* parent = nullptr);
+    explicit InspectorPanel(const GameState* game, AssetManager* assets, QWidget* parent = nullptr);
 
     void setSelectedUnit(std::optional<UnitId> unitId);
     void refreshFromState();
@@ -21,7 +24,10 @@ private:
     QString itemText(const Unit& unit) const;
 
     const GameState* game_;
+    AssetManager* assets_;
     std::optional<UnitId> selectedUnit_;
+    InspectorIconWidget* unitIcon_;
+    InspectorIconWidget* itemIcon_;
     QLabel* nameValue_;
     QLabel* starValue_;
     QLabel* equipmentValue_;

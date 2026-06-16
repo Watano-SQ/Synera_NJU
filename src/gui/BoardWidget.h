@@ -41,7 +41,6 @@ protected:
 private:
     std::optional<Position> cellAt(const QPoint& point) const;
     QRect cellRect(Position position) const;
-    void drawCellBase(QPainter& painter, Position position, const QRect& rect) const;
     void drawGrid(QPainter& painter, const QRect& rect) const;
     void drawUnit(QPainter& painter, const QRect& rect, UnitId id) const;
     void drawHpManaBars(QPainter& painter, const QRect& rect, const Unit& unit) const;

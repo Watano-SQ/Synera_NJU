@@ -1,5 +1,6 @@
 #include "BenchWidget.h"
 
+#include "PaintUtils.h"
 #include "core/Catalog.h"
 
 #include <QApplication>
@@ -18,32 +19,17 @@
 namespace synera::gui {
 namespace {
 
-constexpr int kPreferredSlotSize = 58;
-constexpr int kGap = 4;
-constexpr int kSidePadding = 10;
 constexpr int kBenchWidth = 512;
 constexpr int kBenchHeight = 96;
+constexpr int kSlotWidth = 58;
+constexpr int kSlotHeight = 64;
+constexpr int kSlotGap = 5;
+constexpr int kPaddingLeft = 6;
+constexpr int kPaddingTop = 14;
 
 QString shortLabel(const Unit& unit, UnitId id) {
     const QString prefix = unit.owner() == Owner::PlayerCtrl ? "P" : "E";
     return prefix + QString::number(id);
-}
-
-QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
-    if (sourceSize.isEmpty() || target.isEmpty()) {
-        return QRect();
-    }
-    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
-    return QRect(QPoint(target.center().x() - scaled.width() / 2,
-                       target.center().y() - scaled.height() / 2),
-                 scaled);
-}
-
-void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
-    if (pixmap.isNull() || target.isEmpty()) {
-        return;
-    }
-    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
 }
 
 }  // namespace
@@ -85,10 +71,14 @@ void BenchWidget::refreshFromState() {
 void BenchWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor("#527b36"));
-    painter.setPen(QPen(QColor("#2f4e20"), 2));
-    painter.setBrush(QColor(111, 153, 66, 150));
-    painter.drawRoundedRect(rect().adjusted(3, 3, -3, -3), 8, 8);
+    painter.fillRect(rect(), QColor("#315c2c"));
+    painter.setPen(QPen(QColor("#203d1e"), 2));
+    painter.setBrush(QColor(72, 119, 53, 190));
+    painter.drawRoundedRect(rect().adjusted(3, 8, -3, -8), 7, 7);
+    painter.setPen(QPen(QColor(186, 220, 129, 70), 1));
+    for (int x = 12; x < width(); x += 24) {
+        painter.drawLine(x, 14, x + 12, height() - 15);
+    }
 
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         drawCellBase(painter, slotRect(slot));
@@ -101,14 +91,14 @@ void BenchWidget::paintEvent(QPaintEvent*) {
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         const auto id = game_->bench().occupant(slot);
         if (id.has_value()) {
-            drawUnit(painter, slotRect(slot).adjusted(5, 5, -5, -5), *id);
+            drawUnit(painter, slotRect(slot), *id);
         }
     }
 
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         const auto id = game_->bench().occupant(slot);
         if (id.has_value()) {
-            drawSelectionOverlay(painter, slotRect(slot).adjusted(5, 5, -5, -5), *id);
+            drawSelectionOverlay(painter, slotRect(slot).adjusted(6, 4, -6, -12), *id);
         }
     }
 
@@ -251,13 +241,7 @@ std::optional<int> BenchWidget::slotAt(const QPoint& point) const {
 }
 
 QRect BenchWidget::slotRect(int slot) const {
-    const int slotCount = std::max(1, static_cast<int>(game_->bench().capacity()));
-    const int maxSlotSize = (width() - kSidePadding * 2 - (slotCount - 1) * kGap) / slotCount;
-    const int slotSize = std::clamp(maxSlotSize, 40, kPreferredSlotSize);
-    const int totalWidth = slotCount * slotSize + (slotCount - 1) * kGap;
-    const int left = (width() - totalWidth) / 2 + slot * (slotSize + kGap);
-    const int top = (height() - slotSize) / 2;
-    return QRect(left, top, slotSize, slotSize);
+    return QRect(kPaddingLeft + slot * (kSlotWidth + kSlotGap), kPaddingTop, kSlotWidth, kSlotHeight);
 }
 
 void BenchWidget::drawCellBase(QPainter& painter, const QRect& rect) const {
@@ -265,11 +249,11 @@ void BenchWidget::drawCellBase(QPainter& painter, const QRect& rect) const {
     const QPixmap* frame = assets_ != nullptr ? assets_->pixmapFor("ui/button") : nullptr;
     if (frame != nullptr) {
         drawPixmapAspectFit(painter, rect, *frame);
-        painter.fillRect(rect.adjusted(8, 8, -8, -8), QColor(96, 143, 63, 120));
+        painter.fillRect(rect.adjusted(7, 8, -7, -8), QColor(38, 83, 39, 118));
     } else {
-        painter.setPen(QPen(QColor("#5f7f2f"), 2));
-        painter.setBrush(QColor("#d7e7a4"));
-        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 7, 7);
+        painter.setPen(QPen(QColor("#213e20"), 2));
+        painter.setBrush(QColor("#466e32"));
+        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 6, 6);
     }
     painter.restore();
 }
@@ -290,15 +274,16 @@ void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
         return;
     }
 
+    const QRect unitTarget = rect.adjusted(6, 4, -6, -12);
     const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(displayVisualKey(*unit)) : nullptr;
     if (pixmap != nullptr) {
-        drawPixmapAspectFit(painter, rect.adjusted(2, 2, -2, -12), *pixmap);
+        drawPixmapAspectFit(painter, unitTarget, *pixmap);
     } else {
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor("#2f6fed"));
-        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -12), 6, 6);
+        painter.drawRoundedRect(unitTarget, 6, 6);
         painter.setPen(Qt::white);
-        painter.drawText(rect.adjusted(4, 4, -4, -16), Qt::AlignCenter, shortLabel(*unit, id));
+        painter.drawText(unitTarget, Qt::AlignCenter, shortLabel(*unit, id));
     }
 
     painter.restore();

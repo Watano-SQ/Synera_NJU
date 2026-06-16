@@ -7,10 +7,16 @@
 #include <QPixmap>
 #include <QLayoutItem>
 
+#include <algorithm>
+
 namespace synera::gui {
 
 SynergyPanel::SynergyPanel(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
+    QFont panelFont = font();
+    panelFont.setPointSize(std::max(10, panelFont.pointSize()));
+    setFont(panelFont);
+
     auto* root = new QVBoxLayout(this);
     auto* title = new QLabel("羁绊", this);
     QFont titleFont = title->font();
@@ -34,14 +40,16 @@ void SynergyPanel::refreshFromState() {
         const QString threshold =
             status.active ? QString::number(status.activeThreshold) : QString("next %1").arg(status.nextThreshold);
         auto* row = new QWidget(this);
+        row->setMinimumHeight(44);
         auto* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setContentsMargins(0, 3, 0, 3);
+        rowLayout->setSpacing(8);
         auto* icon = new QLabel(row);
-        icon->setFixedSize(28, 28);
+        icon->setFixedSize(24, 24);
         if (trait != nullptr && assets_ != nullptr) {
             const QPixmap* pixmap = assets_->pixmapFor(trait->visualKey);
             if (pixmap != nullptr) {
-                icon->setPixmap(pixmap->scaled(28, 28, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                icon->setPixmap(pixmap->scaled(24, 24, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             }
         }
         auto* label = new QLabel(QString("%1  %2  %3\n%4")

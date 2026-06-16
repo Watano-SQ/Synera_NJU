@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "PaintUtils.h"
 #include "core/Catalog.h"
 #include "core/Unit.h"
 
@@ -16,6 +17,8 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
+#include <utility>
 
 namespace synera::gui {
 namespace {
@@ -23,32 +26,6 @@ namespace {
 std::unique_ptr<Unit> makeCatalogUnit(const std::string& definitionId) {
     const UnitDefinition* definition = findUnitDefinition(definitionId);
     return definition != nullptr ? createUnitFromDefinition(*definition, Owner::PlayerCtrl) : nullptr;
-}
-
-QRect aspectFitRect(const QRect& target, const QSize& sourceSize) {
-    if (sourceSize.isEmpty() || target.isEmpty()) {
-        return QRect();
-    }
-    const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
-    return QRect(QPoint(target.center().x() - scaled.width() / 2,
-                       target.center().y() - scaled.height() / 2),
-                 scaled);
-}
-
-void drawPixmapAspectFit(QPainter& painter, const QRect& target, const QPixmap& pixmap) {
-    if (pixmap.isNull() || target.isEmpty()) {
-        return;
-    }
-    painter.drawPixmap(aspectFitRect(target, pixmap.size()), pixmap);
-}
-
-void setStatusIcon(QLabel* label, AssetManager& assets, const std::string& visualKey, QSize size) {
-    label->setFixedSize(size);
-    label->setAlignment(Qt::AlignCenter);
-    const QPixmap* pixmap = assets.pixmapFor(visualKey);
-    if (pixmap != nullptr) {
-        label->setPixmap(pixmap->scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    }
 }
 
 void styleStatusValue(QLabel* label) {
@@ -59,7 +36,7 @@ void styleStatusValue(QLabel* label) {
     label->setMinimumWidth(34);
 }
 
-QWidget* makeStatusGroup(QWidget* parent, QLabel* icon, QLabel* value) {
+QWidget* makeStatusGroup(QWidget* parent, QWidget* icon, QLabel* value) {
     auto* group = new QWidget(parent);
     group->setFixedHeight(34);
     group->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -73,10 +50,38 @@ QWidget* makeStatusGroup(QWidget* parent, QLabel* icon, QLabel* value) {
 
 void styleActionButton(QPushButton* button) {
     button->setFixedHeight(30);
+    button->setFixedWidth(88);
     button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    button->setStyleSheet(
+        "QPushButton { background: #684a2a; border: 1px solid #2b1d12; color: #fff0bd; font-weight: 700; }"
+        "QPushButton:disabled { background: #4a4036; color: #a79a87; }"
+        "QPushButton:hover { background: #785734; }");
 }
 
 }  // namespace
+
+class StatusIconWidget : public QWidget {
+public:
+    StatusIconWidget(AssetManager* assets, std::string visualKey, QSize fixedSize, QWidget* parent = nullptr)
+        : QWidget(parent), assets_(assets), visualKey_(std::move(visualKey)) {
+        setFixedSize(fixedSize);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(visualKey_) : nullptr;
+        if (pixmap != nullptr) {
+            drawPixmapAspectFit(painter, rect(), *pixmap);
+        }
+    }
+
+private:
+    AssetManager* assets_;
+    std::string visualKey_;
+};
 
 class FlagMeterWidget : public QWidget {
 public:
@@ -112,14 +117,17 @@ protected:
             return;
         }
 
-        painter.save();
-        painter.setClipRect(QRect(meter.left(), meter.top(), fillWidth, meter.height()));
         if (full != nullptr) {
-            drawPixmapAspectFit(painter, meter, *full);
+            const QRect fitted = aspectFitRect(meter, full->size());
+            const int fittedFillWidth = fitted.width() * std::clamp(value_, 0, maximum_) / maximum_;
+            if (fittedFillWidth > 0) {
+                const QRect target(fitted.left(), fitted.top(), fittedFillWidth, fitted.height());
+                const QRect source(0, 0, full->width() * fittedFillWidth / std::max(1, fitted.width()), full->height());
+                painter.drawPixmap(target, *full, source);
+            }
         } else {
             painter.fillRect(QRect(meter.left(), meter.top(), fillWidth, meter.height()), QColor("#ffd34e"));
         }
-        painter.restore();
     }
 
 private:
@@ -146,25 +154,20 @@ MainWindow::MainWindow(QWidget* parent)
     statusRow->setContentsMargins(8, 4, 8, 4);
     statusRow->setSpacing(8);
 
-    brainIconLabel_ = new QLabel(statusBarWidget);
+    brainIconWidget_ = new StatusIconWidget(&assets_, "ui/brain", QSize(28, 28), statusBarWidget);
     hpValueLabel_ = new QLabel(statusBarWidget);
-    sunIconLabel_ = new QLabel(statusBarWidget);
-    sunValueLabel_ = new QLabel(statusBarWidget);
     flagMeterWidget_ = new FlagMeterWidget(&assets_, statusBarWidget);
     roundValueLabel_ = new QLabel(statusBarWidget);
     levelValueLabel_ = new QLabel(statusBarWidget);
     populationValueLabel_ = new QLabel(statusBarWidget);
     phaseLabel_ = new QLabel(statusBarWidget);
-    upgradeButton_ = new QPushButton("Level Up", statusBarWidget);
-    saveButton_ = new QPushButton("Save", statusBarWidget);
-    loadButton_ = new QPushButton("Load", statusBarWidget);
-    startCombatButton_ = new QPushButton("Start", statusBarWidget);
-    resolveButton_ = new QPushButton("Resolve", statusBarWidget);
+    upgradeButton_ = new QPushButton(QString::fromUtf8("升级人口"), statusBarWidget);
+    saveButton_ = new QPushButton(QString::fromUtf8("存档"), statusBarWidget);
+    loadButton_ = new QPushButton(QString::fromUtf8("读档"), statusBarWidget);
+    startCombatButton_ = new QPushButton(QString::fromUtf8("开始守家"), statusBarWidget);
+    resolveButton_ = new QPushButton(QString::fromUtf8("结算"), statusBarWidget);
 
-    setStatusIcon(brainIconLabel_, assets_, "ui/brain", QSize(28, 28));
-    setStatusIcon(sunIconLabel_, assets_, "ui/sun_counter", QSize(44, 22));
     styleStatusValue(hpValueLabel_);
-    styleStatusValue(sunValueLabel_);
     styleStatusValue(roundValueLabel_);
     styleStatusValue(levelValueLabel_);
     styleStatusValue(populationValueLabel_);
@@ -176,8 +179,7 @@ MainWindow::MainWindow(QWidget* parent)
     styleActionButton(startCombatButton_);
     styleActionButton(resolveButton_);
 
-    auto* hpGroup = makeStatusGroup(statusBarWidget, brainIconLabel_, hpValueLabel_);
-    auto* sunGroup = makeStatusGroup(statusBarWidget, sunIconLabel_, sunValueLabel_);
+    auto* hpGroup = makeStatusGroup(statusBarWidget, brainIconWidget_, hpValueLabel_);
     auto* waveGroup = new QWidget(statusBarWidget);
     waveGroup->setFixedHeight(34);
     waveGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -188,7 +190,6 @@ MainWindow::MainWindow(QWidget* parent)
     waveLayout->addWidget(roundValueLabel_, 0, Qt::AlignVCenter);
 
     statusRow->addWidget(hpGroup);
-    statusRow->addWidget(sunGroup);
     statusRow->addWidget(waveGroup);
     statusRow->addSpacing(8);
     statusRow->addWidget(phaseLabel_);
@@ -204,17 +205,17 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* contentRow = new QHBoxLayout();
     contentRow->setContentsMargins(0, 0, 0, 0);
-    contentRow->setSpacing(10);
+    contentRow->setSpacing(16);
 
     auto* leftContainer = new QWidget(central);
-    leftContainer->setFixedWidth(540);
+    leftContainer->setFixedWidth(536);
     leftContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     auto* leftColumn = new QVBoxLayout(leftContainer);
     leftColumn->setContentsMargins(14, 0, 14, 0);
     leftColumn->setSpacing(8);
 
     auto* rightContainer = new QWidget(central);
-    rightContainer->setFixedWidth(620);
+    rightContainer->setFixedWidth(780);
     rightContainer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     auto* rightColumn = new QVBoxLayout(rightContainer);
     rightColumn->setContentsMargins(0, 0, 0, 0);
@@ -222,7 +223,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     boardWidget_ = new BoardWidget(&game_, &assets_, leftContainer);
     benchWidget_ = new BenchWidget(&game_, &assets_, leftContainer);
-    inspectorPanel_ = new InspectorPanel(&game_, rightContainer);
+    inspectorPanel_ = new InspectorPanel(&game_, &assets_, rightContainer);
     shopPanel_ = new ShopPanel(&game_, &assets_, rightContainer);
     equipmentPanel_ = new EquipmentPanel(&game_, &assets_, rightContainer);
     synergyPanel_ = new SynergyPanel(&game_, &assets_, rightContainer);
@@ -279,8 +280,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(combatTimer_, &QTimer::timeout, this, &MainWindow::advanceCombat);
 
     setWindowTitle("Synera - PvZ Auto Arena");
-    setMinimumSize(1188, 760);
-    resize(1188, 760);
+    setMinimumSize(1360, 760);
+    resize(1360, 760);
     refreshFromState();
     statusBar()->showMessage("Ready");
 }
@@ -291,7 +292,6 @@ void MainWindow::refreshFromState() {
     }
 
     hpValueLabel_->setText(QString::number(game_.player().hp()));
-    sunValueLabel_->setText(QString::number(game_.player().gold()));
     roundValueLabel_->setText(QString("Wave %1").arg(game_.player().currentRound()));
     flagMeterWidget_->setProgress(std::clamp(game_.player().currentRound(), 1, 5), 5);
     levelValueLabel_->setText(QString("Level %1").arg(game_.player().level()));

@@ -1,15 +1,67 @@
 #include "InspectorPanel.h"
 
+#include "AssetManager.h"
+#include "PaintUtils.h"
 #include "core/Catalog.h"
 #include "core/Types.h"
 
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QPainter>
+#include <QSizePolicy>
 #include <QStringList>
 #include <QVBoxLayout>
 
+#include <string>
+#include <utility>
+#include <algorithm>
+
 namespace synera::gui {
 
-InspectorPanel::InspectorPanel(const GameState* game, QWidget* parent) : QWidget(parent), game_(game) {
+class InspectorIconWidget : public QWidget {
+public:
+    InspectorIconWidget(AssetManager* assets, QSize fixedSize, QWidget* parent = nullptr)
+        : QWidget(parent), assets_(assets) {
+        setFixedSize(fixedSize);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    }
+
+    void setVisualKey(std::string visualKey) {
+        visualKey_ = std::move(visualKey);
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(QPen(QColor("#4b4f58"), 1));
+        painter.setBrush(QColor("#f0f2f5"));
+        painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4);
+
+        if (visualKey_.empty()) {
+            painter.setPen(QColor("#9aa1ad"));
+            painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("-"));
+            return;
+        }
+
+        const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(visualKey_) : nullptr;
+        if (pixmap != nullptr) {
+            drawPixmapAspectFit(painter, rect().adjusted(3, 3, -3, -3), *pixmap);
+        }
+    }
+
+private:
+    AssetManager* assets_;
+    std::string visualKey_;
+};
+
+InspectorPanel::InspectorPanel(const GameState* game, AssetManager* assets, QWidget* parent)
+    : QWidget(parent), game_(game), assets_(assets) {
+    QFont panelFont = font();
+    panelFont.setPointSize(std::max(10, panelFont.pointSize()));
+    setFont(panelFont);
+
     auto* root = new QVBoxLayout(this);
     auto* title = new QLabel("单位详情", this);
     QFont titleFont = title->font();
@@ -17,6 +69,16 @@ InspectorPanel::InspectorPanel(const GameState* game, QWidget* parent) : QWidget
     titleFont.setPointSize(titleFont.pointSize() + 2);
     title->setFont(titleFont);
     root->addWidget(title);
+
+    auto* previewRow = new QHBoxLayout();
+    previewRow->setContentsMargins(0, 0, 0, 0);
+    previewRow->setSpacing(10);
+    unitIcon_ = new InspectorIconWidget(assets_, QSize(56, 56), this);
+    itemIcon_ = new InspectorIconWidget(assets_, QSize(48, 48), this);
+    previewRow->addWidget(unitIcon_, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    previewRow->addWidget(itemIcon_, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    previewRow->addStretch();
+    root->addLayout(previewRow);
 
     auto* form = new QFormLayout();
     nameValue_ = new QLabel("-", this);
@@ -70,6 +132,8 @@ void InspectorPanel::setSelectedUnit(std::optional<UnitId> unitId) {
 void InspectorPanel::refreshFromState() {
     const Unit* unit = selectedUnit_.has_value() ? game_->unit(*selectedUnit_) : nullptr;
     if (unit == nullptr) {
+        unitIcon_->setVisualKey({});
+        itemIcon_->setVisualKey({});
         nameValue_->setText("-");
         starValue_->setText("-");
         equipmentValue_->setText("-");
@@ -87,6 +151,19 @@ void InspectorPanel::refreshFromState() {
         visualKeyValue_->setText("-");
         return;
     }
+
+    unitIcon_->setVisualKey(unit->owner() == Owner::PlayerCtrl ? displayVisualKey(*unit) : std::string{});
+    std::string equippedItemVisualKey;
+    if (unit->equippedItemId().has_value()) {
+        const auto instance = game_->item(*unit->equippedItemId());
+        if (instance.has_value()) {
+            const ItemDefinition* definition = findItemDefinition(instance->itemDefId);
+            if (definition != nullptr) {
+                equippedItemVisualKey = definition->visualKey;
+            }
+        }
+    }
+    itemIcon_->setVisualKey(equippedItemVisualKey);
 
     nameValue_->setText(QString::fromStdString(unit->name()));
     starValue_->setText(QString::number(unit->star()));
