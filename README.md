@@ -1,66 +1,93 @@
 # Synera: PvZ Auto Arena
 
-这是一个使用 C++20 和 Qt Widgets 实现的单机 PvE 自走棋原型。项目保留 `synera` 命名空间、CMake target 和 `SYNERA_SAVE 1` 存档格式，玩法内容已切换为植物大战僵尸主题。
+Synera 是一个使用 C++20 和 Qt Widgets 实现的单机 PvE 自走棋原型。项目保留原有 `synera` 命名空间、CMake target 和 `SYNERA_SAVE 1` 存档格式；当前玩法和素材主题是植物大战僵尸。
 
-## 当前内容
+## 当前功能
 
-- 8x8 棋盘、玩家半场/敌方半场、Bench 与 Board 拖拽部署。
-- 准备、守家、结算、游戏结束四阶段循环。
-- 阳光商店、人口升级、装备掉落与装备栏。
-- 三合一升星：二星只改变属性倍率和显示贴图，不改变 `definitionId`、`traits`、`factoryKey` 或技能类型。
-- Qt GUI 使用 PvZ 资源：日/夜半场背景、种子包商店卡牌、Zombieline 装备托盘、顶部脑子/阳光/波次图标和风格化 Bench。
+- 8x8 棋盘，并按敌方半场/玩家半场分区。
+- 玩家 Bench、棋盘部署、棋盘移动、棋盘回 Bench。
+- `Prep`、`Combat`、`Resolve`、`GameOver` 四阶段循环。
+- 五格商店、金币购买、商店刷新。
+- 人口等级与上场单位上限。
+- PvE 敌人波次生成。
+- 核心战斗循环：移动、攻击冷却、法力、技能、胜败结算、战斗后恢复玩家棋盘。
+- 三合一升为二星，同时保留基础 `definitionId`、traits、factory 类型和技能行为。
+- 装备库存、装备属性、胜利掉落装备。
+- shooter、nut、sun、healer、fungus、spike 羁绊。
+- 文本存档/读档，并在读档成功前完成校验。
+- Qt GUI：棋盘、Bench、商店、装备栏、羁绊面板、单位 Inspector 和 PvZ 风格资源。
 
-## 植物单位模型
+## 项目结构
 
-商店只出售基础植物：
-
-- `peashooter` / 豌豆射手
-- `sunflower` / 向日葵
-- `wallnut` / 坚果墙
-- `puffshroom` / 小喷菇
-- `fumeshroom` / 大喷菇
-- `spikeweed` / 地刺
-
-二星视觉形态不进入 `unitCatalog()`，也不会出现在 `shopOffers()`：
-
-- `peashooter -> units/repeater`
-- `sunflower -> units/twin_sunflower`
-- `wallnut -> units/tallnut`
-- `puffshroom -> units/scaredyshroom`
-- `fumeshroom -> units/gloomshroom`
-- `spikeweed -> units/spikerock`
-
-显示单位实例时使用 `displayVisualKey(const Unit&)`。敌人始终使用自身 `visualKey`；玩家单位按 `star1VisualKey` / `star2VisualKey` 显示。
-
-## 资源管线
-
-`pictures/` 是临时素材池，运行时只依赖 `assets/`。
-
-```powershell
-python .\tools\build_assets.py
+```text
+src/core/      游戏规则、状态所有权、战斗、商店、存档、目录、单位
+src/gui/       Qt Widgets GUI、资源加载、拖拽、面板、主窗口
+tests/         阶段测试和 GUI 布局测试
+tools/         资源生成脚本
+assets/        GUI 和资源测试使用的运行时资源
+pictures/      tools/build_assets.py 使用的源素材池
 ```
 
-脚本会生成：
+`GameState` 是核心状态入口。GUI widgets 读取 `GameState`，并通过 `PlacementController` 或 `MainWindow` 调用 `GameState` 命令来修改状态。
 
-- `assets/units/`：单位视觉资源池，包含基础单位和二星贴图，不等于商店单位池。
-- `assets/shop_cards/`：基础植物的商店种子包卡牌，上半为可购买态，下半为禁用态。
-- `assets/ui/`：商店标题、按钮、脑子、阳光、旗帜进度、`zombieline.jpg` 装备托盘。
-- `assets/backgrounds/day_board.jpg` 和 `assets/backgrounds/night_board.jpg`：同屏分半场使用，玩家半场白天，敌方半场夜晚。
+## 构建要求
 
-暂不接入 `Zombie_football_helmet.png`、`Zombie_jackbox_box.png`、`chocolate.png`、`1.png`、`2.png` 等杂项素材。
+- CMake 3.20 或更新版本
+- 支持 C++20 的编译器
+- Qt 6 Widgets
+- 仅在重新生成资源时需要 Python 和 Pillow
 
-## 构建与测试
+在仓库根目录配置并构建：
 
 ```powershell
-& 'D:\Apps\Qt\Tools\CMake_64\bin\cmake.exe' --build .\build --config Debug
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --config Debug
+```
+
+如果 CMake 无法自动找到 Qt，可以传入本机 Qt CMake 前缀：
+
+```powershell
+cmake -S . -B build -DCMAKE_PREFIX_PATH="<Qt install>\lib\cmake"
+cmake --build build --config Debug
+```
+
+## 测试
+
+```powershell
 .\build\stage1_tests.exe
 .\build\stage2_tests.exe
 .\build\stage3_tests.exe
 ```
 
-运行 GUI：
+无界面环境中运行 GUI 布局 smoke test：
 
 ```powershell
-$env:PATH='D:\Apps\Qt\6.11.1\mingw_64\bin;D:\Apps\Qt\Tools\mingw1310_64\bin;' + $env:PATH
+$env:QT_QPA_PLATFORM = "offscreen"
+.\build\gui_layout_tests.exe
+Remove-Item Env:\QT_QPA_PLATFORM
+```
+
+阶段测试基于 `assert`，通过时通常不会输出内容。
+
+## 运行 GUI
+
+```powershell
 .\build\synera_gui.exe
 ```
+
+GUI 会按顺序从可执行文件旁的 `assets/`、项目 `assets/` 和当前工作目录的 `assets/` 查找资源。
+
+## 重新生成资源
+
+运行时资源位于 `assets/`，源素材池位于 `pictures/`。
+
+```powershell
+python .\tools\build_assets.py
+```
+
+脚本会生成单位图、敌人图、装备图标、羁绊徽章、商店卡、UI 元素和日/夜棋盘背景。
+
+## 文档
+
+- `PA说明文档.pdf`：课程 PA 规格与 checklist。
+- `CODE_FAMILIARIZATION_GUIDE.md`：面向当前实现的完整代码熟悉指南。
