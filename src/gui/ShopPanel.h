@@ -32,7 +32,7 @@ protected:
 
 private:
     QRect containerRect() const;
-    QRect sunSlotRect() const;
+    QRect sunCounterRect() const;
     QRect sunTextRect() const;
     QRect refreshRect() const;
     void drawRefreshButton(QPainter& painter) const;

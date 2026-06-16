@@ -55,14 +55,14 @@ void ShopPanel::paintEvent(QPaintEvent*) {
     painter.setBrush(QColor("#7a3516"));
     painter.drawRoundedRect(container.adjusted(1, 1, -1, -1), 8, 8);
 
-    const QRect slot = sunSlotRect();
-    const QPixmap* sunSlot = assets_ != nullptr ? assets_->pixmapFor("ui/plant_shop_sun_slot") : nullptr;
-    if (sunSlot != nullptr) {
-        drawPixmapAspectFit(painter, slot, *sunSlot);
+    const QRect counter = sunCounterRect();
+    const QPixmap* sunCounter = assets_ != nullptr ? assets_->pixmapFor("ui/sun_counter") : nullptr;
+    if (sunCounter != nullptr) {
+        drawPixmapAspectFit(painter, counter, *sunCounter);
     } else {
         painter.setPen(QPen(QColor("#5b2d11"), 2));
         painter.setBrush(QColor("#d7a23a"));
-        painter.drawRoundedRect(slot.adjusted(0, 0, -1, -1), 5, 5);
+        painter.drawRoundedRect(counter.adjusted(0, 0, -1, -1), 5, 5);
     }
 
     QFont goldFont = painter.font();
@@ -80,7 +80,11 @@ void ShopPanel::paintEvent(QPaintEvent*) {
 }
 
 void ShopPanel::mousePressEvent(QMouseEvent* event) {
-    if (event->button() != Qt::LeftButton || game_->phase() != GamePhase::Prep) {
+    if (event->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+    if (game_->phase() != GamePhase::Prep) {
         return;
     }
 
@@ -107,12 +111,13 @@ QRect ShopPanel::containerRect() const {
     return QRect(0, 10, 780, 150);
 }
 
-QRect ShopPanel::sunSlotRect() const {
-    return QRect(18, 25, 72, 54);
+QRect ShopPanel::sunCounterRect() const {
+    return QRect(24, 32, 76, 26);
 }
 
 QRect ShopPanel::sunTextRect() const {
-    return QRect(44, 43, 36, 18);
+    const QRect counter = sunCounterRect();
+    return QRect(counter.left() + 38, counter.top() + 3, counter.width() - 42, counter.height() - 6);
 }
 
 QRect ShopPanel::refreshRect() const {
