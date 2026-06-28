@@ -15,6 +15,7 @@ namespace synera::gui {
 
 class AssetManager;
 
+// 商店面板自绘 5 个商品槽、阳光数量和刷新按钮。
 class ShopPanel : public QWidget {
 public:
     using PurchaseCallback = std::function<void(std::size_t)>;

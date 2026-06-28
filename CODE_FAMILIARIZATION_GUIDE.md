@@ -6,7 +6,7 @@
 
 1. 行为以 `src/core/` 和 `tests/` 为准，README 只负责入口介绍。
 2. `GameState` 是核心状态和规则入口；`Board`、`Bench`、`UnitManager` 只做低层存储；GUI 不应该直接拥有游戏规则。
-3. 当前若干源码字符串里存在真实 mojibake，尤其是 `Catalog.cpp`、`EncounterGenerator.cpp`、`src/main.cpp`、部分 GUI 文案和 `tools/build_assets.py` 的中文显示名。逻辑判断不要依赖这些显示名，要依赖 `definitionId`、`factoryKey`、`traitId`、`visualKey`、`itemDefId` 这些稳定 ASCII ID。
+3. 当前若干源码字符串里存在真实 mojibake，尤其是 `Catalog.cpp`、`EncounterGenerator.cpp`、`src/main.cpp` 和部分 GUI 文案。逻辑判断不要依赖这些显示名，要依赖 `definitionId`、`factoryKey`、`traitId`、`visualKey`、`itemDefId` 这些稳定 ASCII ID。
 
 PA 说明文档给的是目标和 checklist：棋盘、Bench、单位属性、owner/traits、Prep/Combat/Resolve、GUI、商店、羁绊、三合一、装备、存档、扩展方向等。当前 PDF 的文本抽取会因为字体映射乱码，所以读规则时优先看 PDF 原文视觉版，落到代码时再用源码和测试验证。
 
@@ -36,8 +36,8 @@ PA 说明文档给的是目标和 checklist：棋盘、Bench、单位属性、ow
 8. `src/gui/`
    GUI 单独读。它是现在的表现层，但以后可以替换，所以不要把 GUI 当成规则来源。
 
-9. `tools/build_assets.py`、`assets/`、`pictures/`
-   最后看资源管线，确认 `visualKey` 到文件的映射。
+9. `assets/`
+   最后看运行时资源目录，确认 `visualKey` 到文件的映射。
 
 ## Core 总览
 
@@ -634,7 +634,7 @@ GUI 在 `src/gui/`，目前是 Qt Widgets。理解时要和 core 分开：
 
 ## 资源管线
 
-`assets/` 是运行时资源，`pictures/` 是源素材池，`tools/build_assets.py` 负责生成。
+`assets/` 是提交包保留的运行时资源。为符合 PA 提交要求，原始临时素材池和一次性资源加工脚本不放入最终提交目录。
 
 生成内容：
 
@@ -708,7 +708,7 @@ GUI 在 `src/gui/`，目前是 Qt Widgets。理解时要和 core 分开：
 - Shop 高度受限、宽度能容纳合并商店容器。
 - Equipment panel 和 tray 尺寸受限。
 - MainWindow 最小 1360x760。
-- 会保存 `artifacts/gui_layout_grab.png` 作为布局 smoke screenshot。
+- 运行测试时可能临时保存布局 smoke screenshot；该类验证产物不放入最终提交目录。
 
 ## 当前实现的注意点
 

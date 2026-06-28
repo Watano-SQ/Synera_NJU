@@ -2,6 +2,7 @@
 
 namespace synera {
 
+// Player 保存玩家级别的资源和进度。具体规则如升级花费、胜败奖励由 GameState 决定。
 class Player {
 public:
     Player(int hp = 100, int gold = 0, int level = 1, int unitCap = 3);

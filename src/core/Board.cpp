@@ -8,6 +8,7 @@ Board::Board(int rows, int cols) : rows_(rows), cols_(cols) {
     if (rows_ <= 0 || cols_ <= 0) {
         throw std::invalid_argument("Board dimensions must be positive.");
     }
+    // 用一维数组保存二维棋盘，index() 负责 row/col 到数组下标的转换。
     cells_.resize(static_cast<std::size_t>(rows_ * cols_));
 }
 
@@ -24,10 +25,12 @@ bool Board::isInside(Position position) const {
 }
 
 bool Board::isPlayerHalf(Position position) const {
+    // 默认 8x8 时，row 4-7 是玩家半场。
     return isInside(position) && position.row >= rows_ / 2;
 }
 
 bool Board::isEnemyHalf(Position position) const {
+    // 默认 8x8 时，row 0-3 是敌方半场。
     return isInside(position) && position.row < rows_ / 2;
 }
 
@@ -36,6 +39,7 @@ bool Board::isEmpty(Position position) const {
 }
 
 bool Board::canPlace(const Unit& unit, Position position) const {
+    // Board 只检查空位和半场，人口上限、交换等更高层规则由 GameState 处理。
     if (!isInside(position) || !isEmpty(position)) {
         return false;
     }

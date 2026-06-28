@@ -1,4 +1,8 @@
 build/
+build-*/
+release/
+submission/
+*.zip
 *.exe
 *.o
 *.obj
@@ -14,3 +18,5 @@ CMakeCache.txt
 cmake_install.cmake
 Makefile
 synera_save.txt
+artifacts/
+tmp_*

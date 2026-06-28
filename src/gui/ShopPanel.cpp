@@ -29,6 +29,7 @@ ShopPanel::ShopPanel(const GameState* game, AssetManager* assets, QWidget* paren
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     for (std::size_t i = 0; i < cardRects_.size(); ++i) {
+        // 五张商店卡固定布局，点击检测和绘制都复用这些 QRect。
         const int x = kCardStartX + static_cast<int>(i) * (kCardWidth + kCardGap);
         cardRects_[i] = QRect(x, kCardY, kCardWidth, kCardHeight);
     }
@@ -56,6 +57,7 @@ void ShopPanel::paintEvent(QPaintEvent*) {
     painter.drawRoundedRect(container.adjusted(1, 1, -1, -1), 8, 8);
 
     const QRect counter = sunCounterRect();
+    // 先画阳光计数器，再画商品卡和刷新按钮。
     const QPixmap* sunCounter = assets_ != nullptr ? assets_->pixmapFor("ui/sun_counter") : nullptr;
     if (sunCounter != nullptr) {
         drawPixmapAspectFit(painter, counter, *sunCounter);
@@ -80,6 +82,7 @@ void ShopPanel::paintEvent(QPaintEvent*) {
 }
 
 void ShopPanel::mousePressEvent(QMouseEvent* event) {
+    // 商店只在 Prep 阶段响应点击，Combat/Resolve 中只能展示当前状态。
     if (event->button() != Qt::LeftButton) {
         QWidget::mousePressEvent(event);
         return;
@@ -167,6 +170,7 @@ void ShopPanel::drawShopCard(QPainter& painter, std::size_t index) const {
 
     const bool canBuy = canBuySlot(index);
     const std::string cardKey = "shop_cards/" + definition->definitionId + (canBuy ? "_available" : "_disabled");
+    // 优先使用预生成商店卡；资源缺失时用文字卡片兜底。
     const QPixmap* card = assets_ != nullptr ? assets_->pixmapFor(cardKey) : nullptr;
     if (card != nullptr) {
         drawPixmapAspectFit(painter, rect, *card);

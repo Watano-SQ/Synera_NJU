@@ -76,6 +76,8 @@ std::string toString(ItemEffectType effectType) {
             return "MaxHp";
         case ItemEffectType::MaxMana:
             return "MaxMana";
+        case ItemEffectType::SkillManaCost:
+            return "SkillManaCost";
         case ItemEffectType::AttackIntervalPercent:
             return "AttackIntervalPercent";
     }
@@ -94,6 +96,7 @@ std::string toString(const Placement& placement) {
         case PlacementKind::None:
             return "None";
         case PlacementKind::BenchSlot:
+            // 这些字符串会进入存档和调试输出，因此保持稳定的 ASCII 格式。
             out << "Bench[" << *placement.benchSlot << "]";
             return out.str();
         case PlacementKind::BoardCell:
@@ -106,7 +109,9 @@ std::string toString(const Placement& placement) {
 std::string toString(const UnitStats& stats) {
     std::ostringstream out;
     out << "HP " << stats.maxHp << " ATK " << stats.atk << " Range " << stats.range << " Mana "
-        << stats.maxMana << " AtkInt " << stats.attackInterval << " MoveInt " << stats.moveInterval;
+        << stats.maxMana << " InitMana " << stats.initialMana << " ManaRegen " << stats.manaRegenPerSecond
+        << "/s SkillCost " << stats.skillManaCost << " SkillCd " << stats.skillCooldownTicks << " AtkInt "
+        << stats.attackInterval << " MoveInt " << stats.moveInterval;
     return out.str();
 }
 

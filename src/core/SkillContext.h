@@ -9,6 +9,7 @@ namespace synera {
 
 class GameState;
 
+// 技能产生的延迟效果。战斗循环会先收集所有效果，再统一结算。
 struct CombatEffect {
     UnitId source = 0;
     UnitId target = 0;
@@ -16,6 +17,8 @@ struct CombatEffect {
     bool grantsMana = false;
 };
 
+// 技能访问 GameState 的受控窗口。
+// 派生 Unit 不直接修改棋盘和生命，而是通过这里查询目标并追加伤害/治疗事件。
 class SkillContext {
 public:
     SkillContext(GameState& game,

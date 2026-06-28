@@ -23,6 +23,7 @@ constexpr int kCellSize = 64;
 constexpr int kMargin = 0;
 
 QString shortLabel(const Unit& unit, UnitId id) {
+    // 资源缺失时用 P/E + ID 作为最小可读占位。
     const QString prefix = unit.owner() == Owner::PlayerCtrl ? "P" : "E";
     return prefix + QString::number(id);
 }
@@ -31,6 +32,7 @@ QString shortLabel(const Unit& unit, UnitId id) {
 
 BoardWidget::BoardWidget(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
+    // 该控件自身接收拖放，实际状态修改通过 boardDropCallback_ 交给外部。
     setAcceptDrops(true);
     setMouseTracking(true);
     setFixedSize(sizeHint());
@@ -80,6 +82,7 @@ void BoardWidget::paintEvent(QPaintEvent*) {
                            boardRect.width(),
                            (game_->board().rows() - enemyRows) * kCellSize);
 
+    // 先画敌方/玩家半场背景，再画格线、单位和交互覆盖层。
     const QPixmap* enemyBackground =
         assets_ != nullptr ? assets_->pixmapFor(boardHalfBackgroundVisualKey(BoardHalf::Enemy)) : nullptr;
     const QPixmap* playerBackground =
@@ -103,6 +106,7 @@ void BoardWidget::paintEvent(QPaintEvent*) {
 
     for (int row = 0; row < game_->board().rows(); ++row) {
         for (int col = 0; col < game_->board().cols(); ++col) {
+            // 单位绘制在格线之上，后面的 selection/hover/drop 会再覆盖一层。
             const Position pos{row, col};
             const auto id = game_->board().occupant(pos);
             if (id.has_value()) {
@@ -137,6 +141,7 @@ void BoardWidget::paintEvent(QPaintEvent*) {
 }
 
 void BoardWidget::mousePressEvent(QMouseEvent* event) {
+    // 鼠标按下先负责选择单位，若满足条件则记录拖拽起点。
     pressedCell_.reset();
     dropTargetCell_.reset();
     if (event->button() != Qt::LeftButton) {
@@ -188,6 +193,7 @@ void BoardWidget::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
 
+    // 超过 Qt 默认拖拽距离后，把单位 ID 和来源格子编码进 QMimeData。
     const auto id = game_->board().occupant(*pressedCell_);
     if (!id.has_value() || !canStartDrag(*id)) {
         pressedCell_.reset();
@@ -216,6 +222,7 @@ void BoardWidget::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void BoardWidget::dragMoveEvent(QDragMoveEvent* event) {
+    // 拖动经过棋盘时只记录当前悬停格子，用于画虚线落点提示。
     if (event->mimeData()->hasFormat(kUnitDragMimeType) && cellAt(event->position().toPoint()).has_value()) {
         dropTargetCell_ = cellAt(event->position().toPoint());
         update();
@@ -235,6 +242,7 @@ void BoardWidget::dragLeaveEvent(QDragLeaveEvent* event) {
 void BoardWidget::dropEvent(QDropEvent* event) {
     UnitDragData data;
     const auto target = cellAt(event->position().toPoint());
+    // 控件只解码和回调，不直接调用 GameState，便于测试和复用。
     if (!target.has_value() || !decodeDragData(event->mimeData()->data(kUnitDragMimeType), data)) {
         dropTargetCell_.reset();
         update();
@@ -257,6 +265,7 @@ void BoardWidget::leaveEvent(QEvent* event) {
 }
 
 std::optional<Position> BoardWidget::cellAt(const QPoint& point) const {
+    // 坐标转棋盘格。先粗略除以格子大小，再用 cellRect 做精确包含判断。
     const int col = (point.x() - kMargin) / kCellSize;
     const int row = (point.y() - kMargin) / kCellSize;
     const Position position{row, col};
@@ -292,6 +301,7 @@ void BoardWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
     const QRect unitTarget = rect.adjusted(8, 6, -8, -12);
     const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(displayVisualKey(*unit)) : nullptr;
     if (pixmap != nullptr) {
+        // 有资源时显示图片；没有资源时退化成色块和短标签。
         drawPixmapAspectFit(painter, unitTarget, *pixmap);
     } else {
         const QColor color = unit->owner() == Owner::PlayerCtrl ? QColor("#2f6fed") : QColor("#c83f3f");
@@ -308,6 +318,7 @@ void BoardWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
 
 void BoardWidget::drawHpManaBars(QPainter& painter, const QRect& rect, const Unit& unit) const {
     painter.save();
+    // 底部两条小条分别表示生命和法力，宽度按当前值/最大值计算。
     const int hpWidth = std::max(1, rect.width() * unit.hp() / std::max(1, unit.maxHp()));
     const int manaWidth = std::max(1, rect.width() * unit.mana() / std::max(1, unit.maxMana()));
     const QRect hpBack(rect.left(), rect.bottom() - 10, rect.width(), 4);

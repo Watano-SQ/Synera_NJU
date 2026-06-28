@@ -19,6 +19,8 @@ namespace synera {
 class EncounterGenerator;
 struct CombatEffect;
 
+// GameState 是核心规则总入口：持有玩家、棋盘、备战区、单位、商店、装备、羁绊和战斗状态。
+// GUI、CLI 和测试都应通过这里改状态，而不是直接写 Board/Bench/UnitManager。
 class GameState {
 public:
     GameState(int rows = 8,
@@ -53,6 +55,7 @@ public:
     void setCombatConfig(CombatConfig config);
     void setItemDropPercent(int percent);
 
+    // 准备阶段的经济和阵容命令。
     UnitId addUnitToBench(std::unique_ptr<Unit> unit);
     ItemId addItemToInventory(const std::string& itemDefId);
     ActionResult refreshShop();
@@ -60,11 +63,14 @@ public:
     ActionResult upgradePopulation();
     ActionResult equipItem(ItemId itemId, UnitId unitId);
     UnitStats computeEffectiveStats(UnitId id);
+    // 存档只支持非 Combat 阶段，读档会先校验到临时状态再替换当前状态。
     ActionResult saveToFile(const std::string& path) const;
     ActionResult loadFromFile(const std::string& path);
+    // 放置接口用于 Bench <-> Board 和 Board 内移动，所有半场/人口/交换规则都在实现里检查。
     bool deployFromBench(std::size_t slot, Position target, PlacementPolicy policy = PlacementPolicy::Reject);
     bool moveBoardUnit(Position from, Position to, PlacementPolicy policy = PlacementPolicy::Reject);
     bool returnToBench(Position from, std::size_t slot);
+    // 战斗状态机：Prep -> Combat -> Resolve -> Prep/GameOver。
     std::vector<UnitId> generateEnemiesForRound(int round);
     ActionResult startCombat();
     ActionResult tickCombat();
@@ -79,12 +85,16 @@ private:
     friend class EncounterGenerator;
     friend class SkillContext;
 
+    // 每个战斗单位的临时冷却和当前目标，不写入存档。
     struct RuntimeState {
         int attackCooldown = 0;
         int moveCooldown = 0;
+        int skillCooldown = 0;
+        int manaRegenRemainder = 0;
         std::optional<UnitId> currentTarget;
     };
 
+    // 一个 tick 中先收集移动提案，统一检测目标格冲突后再执行。
     struct MoveProposal {
         UnitId unitId = 0;
         Position from;
@@ -97,6 +107,7 @@ private:
     void clearAllEnemyUnits();
     void clearBoardOccupant(Position position);
     void clearBoardForSettlement();
+    // 战斗循环内部步骤。
     void initializeRuntime();
     void updateCooldowns(const std::vector<UnitId>& activeUnits);
     std::optional<UnitId> selectTarget(UnitId attackerId) const;
@@ -109,6 +120,7 @@ private:
     void checkCombatEnd();
     void restorePlayerSnapshot(std::string& message);
     std::vector<UnitId> activeUnitsForOwner(Owner owner) const;
+    // 准备阶段的商店、羁绊、属性和自动合成逻辑。
     void generateShopOffersFree();
     void recomputePrepSynergiesAndStats();
     std::vector<SynergyStatus> computeSynergiesFromBoard() const;
@@ -122,9 +134,11 @@ private:
     void dropVictoryItemIfNeeded();
     int settlementGoldBonusFromSynergies() const;
     bool ownerHasActiveSynergy(Owner owner, const std::string& trait) const;
+    // 读档和阶段切换时用来重建或清理派生状态。
     void rebuildOccupancyFromUnitPlacements();
     void clearRuntimeOnlyState();
 
+    // 持久核心状态。
     Player player_;
     Board board_;
     Bench bench_;
@@ -140,6 +154,7 @@ private:
     ItemId nextItemId_ = 1;
     std::uint64_t nextAcquireSeq_ = 1;
     std::mt19937 rng_;
+    // 以下是战斗运行时/结算辅助状态。
     std::vector<UnitId> currentEnemyUnits_;
     std::vector<std::pair<UnitId, Position>> playerCombatSnapshot_;
     std::unordered_map<UnitId, RuntimeState> runtime_;

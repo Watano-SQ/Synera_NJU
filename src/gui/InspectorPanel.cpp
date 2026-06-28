@@ -40,6 +40,7 @@ protected:
         painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4);
 
         if (visualKey_.empty()) {
+            // 没有资源 key 时显示占位符，避免空白看起来像绘制失败。
             painter.setPen(QColor("#9aa1ad"));
             painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("-"));
             return;
@@ -91,6 +92,10 @@ InspectorPanel::InspectorPanel(const GameState* game, AssetManager* assets, QWid
     atkValue_ = new QLabel("-", this);
     rangeValue_ = new QLabel("-", this);
     manaValue_ = new QLabel("-", this);
+    initialManaValue_ = new QLabel("-", this);
+    manaRegenValue_ = new QLabel("-", this);
+    skillManaCostValue_ = new QLabel("-", this);
+    skillCooldownValue_ = new QLabel("-", this);
     baseStatsValue_ = new QLabel("-", this);
     effectiveStatsValue_ = new QLabel("-", this);
     traitsValue_ = new QLabel("-", this);
@@ -114,6 +119,10 @@ InspectorPanel::InspectorPanel(const GameState* game, AssetManager* assets, QWid
     form->addRow("攻击", atkValue_);
     form->addRow("距离", rangeValue_);
     form->addRow("法力", manaValue_);
+    form->addRow("初始法力", initialManaValue_);
+    form->addRow("回蓝/s", manaRegenValue_);
+    form->addRow("技能消耗", skillManaCostValue_);
+    form->addRow("技能冷却", skillCooldownValue_);
     form->addRow("基础属性", baseStatsValue_);
     form->addRow("最终属性", effectiveStatsValue_);
     form->addRow("羁绊", traitsValue_);
@@ -130,6 +139,7 @@ void InspectorPanel::setSelectedUnit(std::optional<UnitId> unitId) {
 }
 
 void InspectorPanel::refreshFromState() {
+    // 选中单位为空或已被删除时，面板全部回到占位状态。
     const Unit* unit = selectedUnit_.has_value() ? game_->unit(*selectedUnit_) : nullptr;
     if (unit == nullptr) {
         unitIcon_->setVisualKey({});
@@ -144,6 +154,10 @@ void InspectorPanel::refreshFromState() {
         atkValue_->setText("-");
         rangeValue_->setText("-");
         manaValue_->setText("-");
+        initialManaValue_->setText("-");
+        manaRegenValue_->setText("-");
+        skillManaCostValue_->setText("-");
+        skillCooldownValue_->setText("-");
         baseStatsValue_->setText("-");
         effectiveStatsValue_->setText("-");
         traitsValue_->setText("-");
@@ -154,6 +168,7 @@ void InspectorPanel::refreshFromState() {
 
     unitIcon_->setVisualKey(unit->owner() == Owner::PlayerCtrl ? displayVisualKey(*unit) : std::string{});
     std::string equippedItemVisualKey;
+    // 装备图标通过 equippedItemId -> ItemInstance -> ItemDefinition -> visualKey 逐层解析。
     if (unit->equippedItemId().has_value()) {
         const auto instance = game_->item(*unit->equippedItemId());
         if (instance.has_value()) {
@@ -175,6 +190,10 @@ void InspectorPanel::refreshFromState() {
     atkValue_->setText(QString::number(unit->atk()));
     rangeValue_->setText(QString::number(unit->range()));
     manaValue_->setText(QString("%1 / %2").arg(unit->mana()).arg(unit->maxMana()));
+    initialManaValue_->setText(QString::number(unit->initialMana()));
+    manaRegenValue_->setText(QString::number(unit->manaRegenPerSecond()));
+    skillManaCostValue_->setText(unit->hasActiveSkill() ? QString::number(unit->skillManaCost()) : "-");
+    skillCooldownValue_->setText(unit->hasActiveSkill() ? QString("%1 ticks").arg(unit->skillCooldownTicks()) : "-");
     baseStatsValue_->setText(QString::fromStdString(toString(unit->baseStats())));
     effectiveStatsValue_->setText(QString::fromStdString(toString(unit->effectiveStats())));
     traitsValue_->setText(traitsText(*unit));
@@ -184,6 +203,7 @@ void InspectorPanel::refreshFromState() {
 
 QString InspectorPanel::traitsText(const Unit& unit) const {
     QStringList parts;
+    // 面板展示优先使用目录里的显示名，找不到时退回 traitId。
     for (const std::string& trait : unit.traits()) {
         const TraitDefinition* definition = findTraitDefinition(trait);
         parts << QString::fromStdString(definition != nullptr ? definition->displayName : trait);
@@ -195,6 +215,7 @@ QString InspectorPanel::itemText(const Unit& unit) const {
     if (!unit.equippedItemId().has_value()) {
         return "-";
     }
+    // 装备文本中保留 itemId，便于区分同一种装备的不同实例。
     const ItemId itemId = *unit.equippedItemId();
     const auto instance = game_->item(itemId);
     if (!instance.has_value()) {

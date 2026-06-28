@@ -11,6 +11,8 @@ namespace synera {
 
 class SkillContext;
 
+// Unit 是玩家植物和敌人僵尸共用的运行时对象。
+// 它保存生命、法力、星级、装备、羁绊、位置等状态；具体技能由派生类实现。
 class Unit {
 public:
     Unit(std::string name,
@@ -50,6 +52,10 @@ public:
     int atk() const;
     int range() const;
     int maxMana() const;
+    int initialMana() const;
+    int manaRegenPerSecond() const;
+    int skillManaCost() const;
+    int skillCooldownTicks() const;
     int attackInterval() const;
     int moveInterval() const;
     int mana() const;
@@ -67,10 +73,13 @@ public:
     void setState(UnitState state);
     void setPlacement(Placement placement);
 
+    // archetype 用于展示和存档调试，castSkill 由战斗循环在法力满时调用。
     virtual std::string archetype() const;
+    virtual bool hasActiveSkill() const;
     virtual void castSkill(SkillContext& context);
 
 private:
+    // definitionId/factoryKey/visualKey 都是稳定键；显示名可能包含历史乱码，不参与逻辑判断。
     std::string definitionId_;
     std::string name_;
     std::string visualKey_;
@@ -88,35 +97,43 @@ private:
     Placement placement_ = Placement::none();
 };
 
+// 无特殊主动技能的默认单位。
 class BasicUnit : public Unit {
 public:
     using Unit::Unit;
 
     std::string archetype() const override;
+    bool hasActiveSkill() const override;
     void castSkill(SkillContext& context) override;
 };
 
+// 对当前目标造成一次高额单体伤害。
 class PeaBurst : public Unit {
 public:
     using Unit::Unit;
 
     std::string archetype() const override;
+    bool hasActiveSkill() const override;
     void castSkill(SkillContext& context) override;
 };
 
+// 对目标所在整行的敌人造成范围伤害。
 class FumeLineCaster : public Unit {
 public:
     using Unit::Unit;
 
     std::string archetype() const override;
+    bool hasActiveSkill() const override;
     void castSkill(SkillContext& context) override;
 };
 
+// 治疗自己周围一定半径内的友军。
 class SunHealer : public Unit {
 public:
     using Unit::Unit;
 
     std::string archetype() const override;
+    bool hasActiveSkill() const override;
     void castSkill(SkillContext& context) override;
 };
 

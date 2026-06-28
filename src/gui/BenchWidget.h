@@ -14,6 +14,7 @@ class QPainter;
 
 namespace synera::gui {
 
+// Bench 控件绘制备战区槽位，并把拖拽/选择动作通过回调交给 MainWindow。
 class BenchWidget : public QWidget {
 public:
     using UnitSelectedCallback = std::function<void(std::optional<UnitId>)>;

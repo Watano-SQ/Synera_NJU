@@ -15,6 +15,7 @@ namespace synera::gui {
 class AssetManager;
 class EquipmentTrayWidget;
 
+// 装备面板展示库存装备，并让玩家先选装备再点单位穿戴。
 class EquipmentPanel : public QWidget {
 public:
     using ItemSelectedCallback = std::function<void(std::optional<ItemId>)>;

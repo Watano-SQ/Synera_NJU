@@ -29,6 +29,7 @@ SynergyPanel::SynergyPanel(const GameState* game, AssetManager* assets, QWidget*
 }
 
 void SynergyPanel::refreshFromState() {
+    // 羁绊数量很少，刷新时直接重建行控件最简单可靠。
     while (QLayoutItem* item = listLayout_->takeAt(0)) {
         delete item->widget();
         delete item;
@@ -36,6 +37,7 @@ void SynergyPanel::refreshFromState() {
 
     for (const SynergyStatus& status : game_->activeSynergies()) {
         const TraitDefinition* trait = findTraitDefinition(status.trait);
+        // active 时显示当前阈值，未激活时显示下一档需求。
         const QString displayName = QString::fromStdString(trait != nullptr ? trait->displayName : status.trait);
         const QString threshold =
             status.active ? QString::number(status.activeThreshold) : QString("next %1").arg(status.nextThreshold);

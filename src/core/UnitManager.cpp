@@ -9,6 +9,7 @@ UnitId UnitManager::add(std::unique_ptr<Unit> unit) {
     if (!unit) {
         throw std::invalid_argument("Cannot add a null unit.");
     }
+    // 自动分配的 ID 从 1 开始，0 被保留为“无效/未装备”等哨兵值。
     const UnitId id = nextId_++;
     units_.emplace(id, std::move(unit));
     return id;
@@ -21,6 +22,7 @@ UnitId UnitManager::addWithId(UnitId id, std::unique_ptr<Unit> unit) {
     if (id == 0 || units_.find(id) != units_.end()) {
         throw std::invalid_argument("Unit id must be unique and non-zero.");
     }
+    // 读档恢复旧 ID 后，要把 nextId_ 推到更大的位置，避免之后新建单位撞号。
     units_.emplace(id, std::move(unit));
     nextId_ = std::max(nextId_, id + 1);
     return id;
@@ -61,6 +63,7 @@ std::vector<UnitId> UnitManager::ids() const {
     for (const auto& [id, unit] : units_) {
         result.push_back(id);
     }
+    // unordered_map 的遍历顺序不稳定，排序后战斗、存档和测试输出都更可复现。
     std::sort(result.begin(), result.end());
     return result;
 }

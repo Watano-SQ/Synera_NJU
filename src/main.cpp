@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace synera;
 
@@ -70,8 +71,8 @@ void printActiveSet(const GameState& game, const std::string& label, const std::
 int main() {
     GameState game;
 
-    const UnitId peashooter = game.addUnitToBench(makePlayerUnit("豌豆射手", {"shooter"}));
-    const UnitId sunflower = game.addUnitToBench(makePlayerUnit("向日葵", {"sun", "healer"}));
+    const UnitId peashooter = game.addUnitToBench(makePlayerUnit("Peashooter", {"shooter"}));
+    const UnitId sunflower = game.addUnitToBench(makePlayerUnit("Sunflower", {"sun", "healer"}));
 
     std::cout << "Created player units: #" << peashooter << ", #" << sunflower << "\n";
 
@@ -80,7 +81,8 @@ int main() {
     const bool placedSunflower = game.deployFromBench(1, Position{6, 4});
 
     std::cout << "Deploy peashooter to player half: " << (placedPeashooter ? "ok" : "failed") << "\n";
-    std::cout << "Deploy sunflower to enemy half: " << (illegalSunflowerPlacement ? "ok" : "rejected") << "\n";
+    std::cout << "Deploy sunflower to enemy half: " << (illegalSunflowerPlacement ? "ok" : "rejected")
+              << "\n";
     std::cout << "Deploy sunflower to player half: " << (placedSunflower ? "ok" : "failed") << "\n";
 
     const std::vector<UnitId> enemies = game.generateEnemiesForRound(1);

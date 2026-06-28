@@ -28,6 +28,7 @@ int Player::currentRound() const {
 }
 
 void Player::setHp(int hp) {
+    // 玩家生命、金币等基础数值在入口处钳制，避免调用方反复写边界判断。
     hp_ = std::max(0, hp);
 }
 

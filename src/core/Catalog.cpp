@@ -15,6 +15,7 @@ UnitDefinition makeDefinition(std::string definitionId,
                               std::string factoryKey,
                               std::string star1VisualKey,
                               std::string star2VisualKey) {
+    // visualKey 默认等于一星资源；二星资源只在 displayVisualKey 中按星级启用。
     UnitDefinition definition;
     definition.definitionId = std::move(definitionId);
     definition.name = std::move(name);
@@ -31,20 +32,21 @@ UnitDefinition makeDefinition(std::string definitionId,
 }  // namespace
 
 const std::vector<UnitDefinition>& unitCatalog() {
+    // 这里是商店可刷出的玩家单位目录。二星形态只是视觉资源，不作为独立商品。
     static const std::vector<UnitDefinition> definitions{
         makeDefinition("peashooter",
                        "豌豆射手",
                        1,
                        {"shooter"},
-                       UnitStats{300, 32, 3, 60, 60, 20},
-                       "BasicUnit",
+                       UnitStats{300, 32, 3, 60, 60, 20, 15, 8, 40, 150},
+                       "PeaBurst",
                        "units/peashooter",
                        "units/repeater"),
         makeDefinition("sunflower",
                        "向日葵",
                        2,
                        {"sun", "healer"},
-                       UnitStats{260, 22, 2, 60, 64, 20},
+                       UnitStats{260, 22, 2, 60, 64, 20, 25, 7, 45, 180},
                        "SunHealer",
                        "units/sunflower",
                        "units/twin_sunflower"),
@@ -52,7 +54,7 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        "坚果墙",
                        2,
                        {"nut"},
-                       UnitStats{520, 18, 1, 70, 70, 20},
+                       UnitStats{520, 18, 1, 70, 70, 20, 10, 3, 0, 0},
                        "BasicUnit",
                        "units/wallnut",
                        "units/tallnut"),
@@ -60,15 +62,15 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        "小喷菇",
                        1,
                        {"fungus"},
-                       UnitStats{220, 24, 2, 45, 48, 20},
-                       "BasicUnit",
+                       UnitStats{220, 24, 2, 45, 48, 20, 20, 12, 30, 120},
+                       "PeaBurst",
                        "units/puffshroom",
                        "units/scaredyshroom"),
         makeDefinition("fumeshroom",
                        "大喷菇",
                        2,
                        {"fungus", "shooter"},
-                       UnitStats{320, 30, 2, 60, 60, 20},
+                       UnitStats{320, 30, 2, 60, 60, 20, 20, 10, 45, 180},
                        "FumeLineCaster",
                        "units/fumeshroom",
                        "units/gloomshroom"),
@@ -76,7 +78,7 @@ const std::vector<UnitDefinition>& unitCatalog() {
                        "地刺",
                        2,
                        {"spike"},
-                       UnitStats{300, 34, 1, 60, 50, 20},
+                       UnitStats{300, 34, 1, 60, 50, 20, 10, 5, 0, 0},
                        "BasicUnit",
                        "units/spikeweed",
                        "units/spikerock"),
@@ -93,6 +95,7 @@ const UnitDefinition* findUnitDefinition(const std::string& definitionId) {
 }
 
 std::string displayVisualKey(const Unit& unit) {
+    // 敌人没有星级替换表，直接使用生成器给出的 visualKey。
     if (unit.owner() == Owner::EnemyCtrl) {
         return unit.visualKey();
     }
@@ -118,6 +121,7 @@ std::string boardHalfBackgroundVisualKey(BoardHalf half) {
 }
 
 std::unique_ptr<Unit> createUnitFromDefinition(const UnitDefinition& definition, Owner owner) {
+    // factoryKey 决定实例化哪个 Unit 派生类，从而决定主动技能行为。
     if (definition.factoryKey == "PeaBurst") {
         return std::make_unique<PeaBurst>(definition.definitionId,
                                           definition.name,
@@ -155,11 +159,12 @@ std::unique_ptr<Unit> createUnitFromDefinition(const UnitDefinition& definition,
 }
 
 const std::vector<ItemDefinition>& itemCatalog() {
+    // 装备目录只定义数值效果；实例 ID 和归属由 GameState 管理。
     static const std::vector<ItemDefinition> definitions{
         ItemDefinition{"plant_food", "植物营养剂", "items/plant_food", ItemEffectType::Attack, 15},
         ItemDefinition{"pumpkin_shell", "南瓜护壳", "items/pumpkin_shell", ItemEffectType::MaxHp, 150},
         ItemDefinition{"garden_glove", "园艺手套", "items/garden_glove", ItemEffectType::AttackIntervalPercent, -20},
-        ItemDefinition{"chlorophyll", "叶绿素", "items/chlorophyll", ItemEffectType::MaxMana, -30},
+        ItemDefinition{"chlorophyll", "叶绿素", "items/chlorophyll", ItemEffectType::SkillManaCost, -20},
     };
     return definitions;
 }
@@ -173,6 +178,7 @@ const ItemDefinition* findItemDefinition(const std::string& itemDefId) {
 }
 
 const std::vector<TraitDefinition>& traitCatalog() {
+    // 羁绊目录主要提供 GUI 展示文案和图标 key，实际阈值在 GameState 里写死。
     static const std::vector<TraitDefinition> definitions{
         TraitDefinition{"shooter", "射手", "traits/shooter", "射手植物提高攻击频率。"},
         TraitDefinition{"nut", "坚果", "traits/nut", "坚果单位获得额外生命值。"},

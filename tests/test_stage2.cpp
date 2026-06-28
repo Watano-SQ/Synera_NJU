@@ -15,7 +15,6 @@ CombatConfig fastConfig() {
     CombatConfig config;
     config.attackInterval = 1;
     config.moveInterval = 1;
-    config.manaPerAttack = 60;
     config.victoryGold = 5;
     config.defeatGold = 2;
     config.defeatHpLoss = 10;
@@ -33,18 +32,35 @@ std::unique_ptr<Unit> basicPlayer(const std::string& name = "Player",
 }
 
 std::unique_ptr<Unit> peaBurstPlayer(int atk = 40, int range = 1) {
-    return std::make_unique<PeaBurst>("双重射手", Owner::PlayerCtrl, 500, atk, range, 60,
-                                      std::vector<std::string>{"shooter"}, "units/repeater");
+    return std::make_unique<PeaBurst>("test_burst",
+                                      "双重射手",
+                                      Owner::PlayerCtrl,
+                                      UnitStats{500, atk, range, 60, 1, 1, 0, 0, 40, 3},
+                                      std::vector<std::string>{"shooter"},
+                                      "units/repeater",
+                                      "PeaBurst");
 }
 
 std::unique_ptr<Unit> fumeLinePlayer(int atk = 40, int range = 2) {
-    return std::make_unique<FumeLineCaster>("大喷菇", Owner::PlayerCtrl, 500, atk, range, 60,
-                                            std::vector<std::string>{"fungus"}, "units/fumeshroom");
+    return std::make_unique<FumeLineCaster>("test_fume",
+                                            "大喷菇",
+                                            Owner::PlayerCtrl,
+                                            UnitStats{500, atk, range, 60, 1, 1, 0, 0, 40, 3},
+                                            std::vector<std::string>{"fungus"},
+                                            "units/fumeshroom",
+                                            "FumeLineCaster");
 }
 
 void deployOne(GameState& game, Position position, std::unique_ptr<Unit> unit = basicPlayer()) {
     game.addUnitToBench(std::move(unit));
     assert(game.deployFromBench(0, position));
+}
+
+void tickUntilResolve(GameState& game, int maxTicks = 240) {
+    for (int tick = 0; tick < maxTicks && game.phase() == GamePhase::Combat; ++tick) {
+        assert(game.tickCombat().success);
+    }
+    assert(game.phase() == GamePhase::Resolve);
 }
 
 void testPhaseGuardsAndCombatDeploymentRejection() {
@@ -133,21 +149,62 @@ void testSpawnFailureIsAtomic() {
     assert(game.unit(player)->placement().kind == PlacementKind::BoardCell);
 }
 
-void testBasicAttackManaDoesNotCastUntilNextReadyAttack() {
+void testNaturalManaSkillCostAndCooldown() {
     GameState game(8, 8, 8, fastConfig());
     UnitId player = game.addUnitToBench(peaBurstPlayer(1, 10));
+    Unit* playerUnit = game.unit(player);
+    playerUnit->setBaseStats(UnitStats{500, 1, 10, 60, 1, 1, 50, 0, 40, 3});
+    playerUnit->setEffectiveStats(playerUnit->baseStats());
     assert(game.deployFromBench(0, Position{7, 4}));
     assert(game.startCombat().success);
     const UnitId enemy = game.currentEnemyUnits().front();
     const int initialEnemyHp = game.unit(enemy)->hp();
 
     assert(game.tickCombat().success);
-    assert(game.unit(player)->mana() == game.unit(player)->maxMana());
-    assert(game.unit(enemy)->hp() == initialEnemyHp - 1);
+    assert(game.unit(player)->mana() == 10);
+    assert(game.unit(enemy)->hp() == initialEnemyHp - 2);
+
+    game.unit(player)->setMana(50);
+    assert(game.tickCombat().success);
+    assert(game.unit(player)->mana() == 50);
+    assert(game.unit(enemy)->hp() == initialEnemyHp - 3);
 
     assert(game.tickCombat().success);
-    assert(game.unit(player)->mana() == 0);
-    assert(game.unit(enemy)->hp() == initialEnemyHp - 3);
+    assert(game.unit(player)->mana() == 50);
+    assert(game.unit(enemy)->hp() == initialEnemyHp - 4);
+
+    assert(game.tickCombat().success);
+    assert(game.unit(player)->mana() == 10);
+    assert(game.unit(enemy)->hp() == initialEnemyHp - 6);
+}
+
+void testNaturalManaRegeneratesWithoutAttacking() {
+    GameState game(8, 8, 8, fastConfig());
+    UnitId player = game.addUnitToBench(peaBurstPlayer(1, 1));
+    Unit* playerUnit = game.unit(player);
+    playerUnit->setBaseStats(UnitStats{500, 1, 1, 60, 1, 1, 5, 60, 40, 3});
+    playerUnit->setEffectiveStats(playerUnit->baseStats());
+    assert(game.deployFromBench(0, Position{7, 0}));
+    assert(game.startCombat().success);
+
+    assert(game.unit(player)->mana() == 5);
+    assert(game.tickCombat().success);
+    assert(game.unit(player)->mana() > 5);
+}
+
+void testBasicUnitDoesNotCastWhenManaIsFull() {
+    GameState game(8, 8, 8, fastConfig());
+    UnitId player = game.addUnitToBench(basicPlayer("No Skill", 500, 1, 10));
+    assert(game.deployFromBench(0, Position{7, 4}));
+    assert(game.startCombat().success);
+    game.unit(player)->setMana(game.unit(player)->maxMana());
+    const UnitId enemy = game.currentEnemyUnits().front();
+    const int initialEnemyHp = game.unit(enemy)->hp();
+
+    assert(game.tickCombat().success);
+    assert(game.unit(player)->mana() == game.unit(player)->maxMana());
+    assert(game.unit(enemy)->hp() == initialEnemyHp - 1);
+    assert(game.unit(player)->state() == UnitState::Attacking);
 }
 
 void testTargetTieBreakPrefersLowerColumnWhenHpTied() {
@@ -182,7 +239,7 @@ void testTargetTieBreakPrefersLowerColumnWhenHpTied() {
     assert(game.unit(rightEnemy)->hp() == rightHp);
 }
 
-void testMoveConflictLeavesContestedCellEmpty() {
+void testMoveConflictLetsOneUnitAdvanceDeterministically() {
     GameState game(4, 3, 6, fastConfig());
     game.player().setUnitCap(4);
     const UnitId leftAttacker = game.addUnitToBench(basicPlayer("Left", 300, 10, 1));
@@ -196,9 +253,29 @@ void testMoveConflictLeavesContestedCellEmpty() {
 
     assert(game.startCombat().success);
     assert(game.tickCombat().success);
-    assert(game.board().occupant(Position{3, 0}) == leftAttacker);
+    assert(!game.board().occupant(Position{3, 0}).has_value());
+    assert(game.board().occupant(Position{3, 1}) == leftAttacker);
     assert(game.board().occupant(Position{3, 2}) == rightAttacker);
-    assert(!game.board().occupant(Position{3, 1}).has_value());
+}
+
+void testOpposingUnitsContestingMiddleCellDoNotDeadlock() {
+    GameState game(3, 1, 4, fastConfig());
+    const UnitId player = game.addUnitToBench(basicPlayer("Plant", 500, 1, 1));
+    assert(game.deployFromBench(0, Position{2, 0}));
+
+    assert(game.startCombat().success);
+    assert(game.currentEnemyUnits().size() == 1);
+    const UnitId enemy = game.currentEnemyUnits().front();
+    const int playerHp = game.unit(player)->hp();
+    const int enemyHp = game.unit(enemy)->hp();
+
+    assert(game.tickCombat().success);
+    assert(game.board().occupant(Position{1, 0}) == player);
+    assert(game.board().occupant(Position{0, 0}) == enemy);
+
+    assert(game.tickCombat().success);
+    assert(game.unit(player)->hp() < playerHp);
+    assert(game.unit(enemy)->hp() == enemyHp - game.unit(player)->atk());
 }
 
 void testResolveRestoresPlayersAndBench() {
@@ -243,6 +320,31 @@ void testGameOverRejectsFurtherActions() {
     assert(!game.moveBoardUnit(Position{7, 4}, Position{7, 3}));
 }
 
+void testDefaultCampaignContinuesAfterThirdRoundAndEndsAfterBoss() {
+    GameState thirdRoundGame;
+    thirdRoundGame.player().setCurrentRound(3);
+    deployOne(thirdRoundGame, Position{7, 4}, fumeLinePlayer(2000, 10));
+
+    assert(thirdRoundGame.startCombat().success);
+    thirdRoundGame.unit(*thirdRoundGame.board().occupant(Position{7, 4}))->setMana(60);
+    tickUntilResolve(thirdRoundGame);
+    assert(thirdRoundGame.resolveRound().success);
+    assert(thirdRoundGame.phase() == GamePhase::Prep);
+    assert(thirdRoundGame.matchResult() == MatchResult::Ongoing);
+    assert(thirdRoundGame.player().currentRound() == 4);
+
+    GameState bossRoundGame;
+    bossRoundGame.player().setCurrentRound(5);
+    deployOne(bossRoundGame, Position{7, 4}, fumeLinePlayer(2000, 10));
+
+    assert(bossRoundGame.startCombat().success);
+    bossRoundGame.unit(*bossRoundGame.board().occupant(Position{7, 4}))->setMana(60);
+    tickUntilResolve(bossRoundGame);
+    assert(bossRoundGame.resolveRound().success);
+    assert(bossRoundGame.phase() == GamePhase::GameOver);
+    assert(bossRoundGame.matchResult() == MatchResult::PlayerVictory);
+}
+
 }  // namespace
 
 int main() {
@@ -251,10 +353,14 @@ int main() {
     testCurrentEnemyUnitsIncludeDeadUntilResolve();
     testBenchUnitsDoNotJoinActiveCombatList();
     testSpawnFailureIsAtomic();
-    testBasicAttackManaDoesNotCastUntilNextReadyAttack();
+    testNaturalManaSkillCostAndCooldown();
+    testNaturalManaRegeneratesWithoutAttacking();
+    testBasicUnitDoesNotCastWhenManaIsFull();
     testTargetTieBreakPrefersLowerColumnWhenHpTied();
-    testMoveConflictLeavesContestedCellEmpty();
+    testMoveConflictLetsOneUnitAdvanceDeterministically();
+    testOpposingUnitsContestingMiddleCellDoNotDeadlock();
     testResolveRestoresPlayersAndBench();
     testGameOverRejectsFurtherActions();
+    testDefaultCampaignContinuesAfterThirdRoundAndEndsAfterBoss();
     return 0;
 }

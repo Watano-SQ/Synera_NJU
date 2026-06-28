@@ -12,6 +12,7 @@ namespace synera::gui {
 class AssetManager;
 class InspectorIconWidget;
 
+// Inspector 显示当前选中单位的完整运行时信息，帮助调试属性、装备和位置。
 class InspectorPanel : public QWidget {
 public:
     explicit InspectorPanel(const GameState* game, AssetManager* assets, QWidget* parent = nullptr);
@@ -38,6 +39,10 @@ private:
     QLabel* atkValue_;
     QLabel* rangeValue_;
     QLabel* manaValue_;
+    QLabel* initialManaValue_;
+    QLabel* manaRegenValue_;
+    QLabel* skillManaCostValue_;
+    QLabel* skillCooldownValue_;
     QLabel* baseStatsValue_;
     QLabel* effectiveStatsValue_;
     QLabel* traitsValue_;

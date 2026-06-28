@@ -14,6 +14,7 @@ class QPainter;
 
 namespace synera::gui {
 
+// 棋盘控件只负责绘制和收集鼠标/拖拽事件，真正改状态交给回调和 PlacementController。
 class BoardWidget : public QWidget {
 public:
     using UnitSelectedCallback = std::function<void(std::optional<UnitId>)>;

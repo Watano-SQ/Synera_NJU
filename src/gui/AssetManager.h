@@ -9,6 +9,7 @@
 
 namespace synera::gui {
 
+// 资源管理器按 visualKey 查找图片，并把加载后的 QPixmap 缓存在内存里。
 class AssetManager {
 public:
     explicit AssetManager(QString projectRoot = {});

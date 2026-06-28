@@ -4,7 +4,10 @@
 #include "core/Catalog.h"
 #include "core/Unit.h"
 
+#include <QCoreApplication>
+#include <QDebug>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QPainter>
@@ -13,6 +16,7 @@
 #include <QSize>
 #include <QSizePolicy>
 #include <QStatusBar>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -24,11 +28,13 @@ namespace synera::gui {
 namespace {
 
 std::unique_ptr<Unit> makeCatalogUnit(const std::string& definitionId) {
+    // 初始阵容从 Catalog 创建，避免 GUI 示例绕过正式单位定义。
     const UnitDefinition* definition = findUnitDefinition(definitionId);
     return definition != nullptr ? createUnitFromDefinition(*definition, Owner::PlayerCtrl) : nullptr;
 }
 
 void styleStatusValue(QLabel* label) {
+    // 顶栏数值统一加粗，避免每个 label 单独设置样式。
     QFont font = label->font();
     font.setBold(true);
     font.setPointSize(std::max(10, font.pointSize() + 1));
@@ -37,6 +43,7 @@ void styleStatusValue(QLabel* label) {
 }
 
 QWidget* makeStatusGroup(QWidget* parent, QWidget* icon, QLabel* value) {
+    // 图标 + 数值的小组件用于生命、波次等状态组。
     auto* group = new QWidget(parent);
     group->setFixedHeight(34);
     group->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -49,6 +56,7 @@ QWidget* makeStatusGroup(QWidget* parent, QWidget* icon, QLabel* value) {
 }
 
 void styleActionButton(QPushButton* button) {
+    // 顶栏动作按钮保持固定尺寸，避免文本变化导致布局跳动。
     button->setFixedHeight(30);
     button->setFixedWidth(88);
     button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -70,6 +78,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent*) override {
+        // 仅绘制一张资源图，资源缺失时保持透明。
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
         const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(visualKey_) : nullptr;
@@ -91,6 +100,7 @@ public:
     }
 
     void setProgress(int value, int maximum) {
+        // value/maximum 表示当前波次进度，绘制时再换算为宽度。
         value_ = std::max(0, value);
         maximum_ = std::max(1, maximum);
         update();
@@ -113,6 +123,7 @@ protected:
         }
 
         const int fillWidth = meter.width() * std::clamp(value_, 0, maximum_) / maximum_;
+        // 有满格素材时裁剪满格图；没有素材时用纯色填充。
         if (fillWidth <= 0) {
             return;
         }
@@ -140,6 +151,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       placementController_(&game_),
       assets_(QString::fromUtf8(SYNERA_PROJECT_ROOT)) {
+    // 先初始化 GameState，再创建依赖它读取尺寸和状态的控件。
     initializeGame();
 
     auto* central = new QWidget(this);
@@ -228,6 +240,7 @@ MainWindow::MainWindow(QWidget* parent)
     equipmentPanel_ = new EquipmentPanel(&game_, &assets_, rightContainer);
     synergyPanel_ = new SynergyPanel(&game_, &assets_, rightContainer);
 
+    // 左侧是棋盘和 Bench，右侧是商店、装备、羁绊和单位详情。
     leftColumn->addWidget(boardWidget_, 0, Qt::AlignHCenter | Qt::AlignTop);
     leftColumn->addWidget(benchWidget_, 0, Qt::AlignHCenter | Qt::AlignTop);
     leftColumn->addStretch();
@@ -269,6 +282,7 @@ MainWindow::MainWindow(QWidget* parent)
     shopPanel_->setPurchaseCallback([this](std::size_t index) { purchaseShopSlot(index); });
     shopPanel_->setRefreshCallback([this]() { refreshShop(); });
     equipmentPanel_->setItemSelectedCallback([this](std::optional<ItemId> itemId) { setSelectedItem(itemId); });
+    // 所有按钮最终都调用 GameState 命令，然后统一 refreshFromState。
     connect(upgradeButton_, &QPushButton::clicked, this, &MainWindow::upgradePopulation);
     connect(saveButton_, &QPushButton::clicked, this, &MainWindow::saveGame);
     connect(loadButton_, &QPushButton::clicked, this, &MainWindow::loadGame);
@@ -277,23 +291,29 @@ MainWindow::MainWindow(QWidget* parent)
 
     combatTimer_ = new QTimer(this);
     combatTimer_->setInterval(16);
+    // 约 60 FPS 推进战斗 tick，直到 GameState 进入 Resolve 或命令失败。
     connect(combatTimer_, &QTimer::timeout, this, &MainWindow::advanceCombat);
 
     setWindowTitle("Synera - PvZ Auto Arena");
     setMinimumSize(1360, 760);
     resize(1360, 760);
+    startBackgroundMusic();
     refreshFromState();
     statusBar()->showMessage("Ready");
 }
 
+MainWindow::~MainWindow() = default;
+
 void MainWindow::refreshFromState() {
+    // 被合成或读档删除的单位可能仍处于选中状态，这里先清理悬空选择。
     if (selectedUnit_.has_value() && game_.unit(*selectedUnit_) == nullptr) {
         selectedUnit_.reset();
     }
 
     hpValueLabel_->setText(QString::number(game_.player().hp()));
     roundValueLabel_->setText(QString("Wave %1").arg(game_.player().currentRound()));
-    flagMeterWidget_->setProgress(std::clamp(game_.player().currentRound(), 1, 5), 5);
+    const int maxRound = std::max(1, game_.combatConfig().maxRound);
+    flagMeterWidget_->setProgress(std::clamp(game_.player().currentRound(), 1, maxRound), maxRound);
     levelValueLabel_->setText(QString("Level %1").arg(game_.player().level()));
     populationValueLabel_->setText(
         QString("Pop %1/%2").arg(game_.deployedPlayerUnitCount()).arg(game_.player().unitCap()));
@@ -301,6 +321,7 @@ void MainWindow::refreshFromState() {
 
     const bool canDrag = game_.phase() == GamePhase::Prep;
     const bool canManage = game_.phase() == GamePhase::Prep;
+    // 根据阶段控制按钮和拖拽能力，避免 UI 发出核心层会拒绝的操作。
     startCombatButton_->setEnabled(game_.phase() == GamePhase::Prep && game_.matchResult() == MatchResult::Ongoing);
     resolveButton_->setEnabled(game_.phase() == GamePhase::Resolve);
     upgradeButton_->setEnabled(canManage);
@@ -321,6 +342,7 @@ void MainWindow::refreshFromState() {
 }
 
 void MainWindow::initializeGame() {
+    // 新游戏给 8 阳光和 3 个初始单位，并默认部署一个豌豆射手。
     game_.player().setGold(8);
     game_.player().setLevel(1);
     game_.player().setUnitCap(3);
@@ -333,6 +355,7 @@ void MainWindow::initializeGame() {
 }
 
 void MainWindow::setSelectedUnit(std::optional<UnitId> unitId) {
+    // 若当前先选了装备，再点击单位，则把这次点击解释为穿戴装备。
     if (unitId.has_value() && tryEquipSelectedItem(*unitId)) {
         selectedUnit_ = unitId;
         refreshFromState();
@@ -348,6 +371,7 @@ void MainWindow::applyPlacementResult(const PlacementResult& result) {
 }
 
 void MainWindow::purchaseShopSlot(std::size_t index) {
+    // 下列命令函数都把核心层返回消息展示到状态栏，并刷新所有面板。
     const ActionResult result = game_.purchaseShopSlot(index);
     statusBar()->showMessage(QString::fromStdString(result.message), 2500);
     refreshFromState();
@@ -374,6 +398,7 @@ bool MainWindow::tryEquipSelectedItem(UnitId unitId) {
     if (!selectedItem_.has_value()) {
         return false;
     }
+    // 穿戴成功后清空选中装备，失败则保留选择让玩家可继续尝试。
     const ActionResult result = game_.equipItem(*selectedItem_, unitId);
     statusBar()->showMessage(QString::fromStdString(result.message), 2500);
     if (result.success) {
@@ -383,6 +408,7 @@ bool MainWindow::tryEquipSelectedItem(UnitId unitId) {
 }
 
 void MainWindow::saveGame() {
+    // 保存和读档都禁止在 Combat 中触发，按钮状态在 refreshFromState 中控制。
     const QString path = QFileDialog::getSaveFileName(this, "Save Synera", "synera_save.txt", "Synera Save (*.txt)");
     if (path.isEmpty()) {
         return;
@@ -393,6 +419,7 @@ void MainWindow::saveGame() {
 }
 
 void MainWindow::loadGame() {
+    // 读档前停止战斗计时器，避免读档过程中 tickCombat 修改状态。
     const QString path = QFileDialog::getOpenFileName(this, "Load Synera", QString(), "Synera Save (*.txt)");
     if (path.isEmpty()) {
         return;
@@ -408,6 +435,7 @@ void MainWindow::loadGame() {
 }
 
 void MainWindow::startCombat() {
+    // startCombat 成功进入 Combat 后才启动计时器。
     const ActionResult result = game_.startCombat();
     statusBar()->showMessage(QString::fromStdString(result.message), 2500);
     if (result.success && game_.phase() == GamePhase::Combat) {
@@ -417,6 +445,7 @@ void MainWindow::startCombat() {
 }
 
 void MainWindow::advanceCombat() {
+    // 每次 timer timeout 推进一个核心战斗 tick，并在进入 Resolve 时停表。
     const ActionResult result = game_.tickCombat();
     if (!result.success) {
         combatTimer_->stop();
@@ -429,10 +458,44 @@ void MainWindow::advanceCombat() {
 }
 
 void MainWindow::resolveRound() {
+    // 手动结算按钮用于 Resolve 阶段，把玩家带回 Prep 或 GameOver。
     combatTimer_->stop();
     const ActionResult result = game_.resolveRound();
     statusBar()->showMessage(QString::fromStdString(result.message), 2500);
     refreshFromState();
+}
+
+void MainWindow::startBackgroundMusic() {
+    if (qEnvironmentVariable("SYNERA_DISABLE_BGM") == "1") {
+        return;
+    }
+
+    const QString appAssetPath = QCoreApplication::applicationDirPath() + "/assets/audio/grasswalk.mp3";
+    const QString projectAssetPath = QString::fromUtf8(SYNERA_PROJECT_ROOT) + "/assets/audio/grasswalk.mp3";
+    const QString musicPath = QFileInfo::exists(appAssetPath) ? appAssetPath : projectAssetPath;
+    if (!QFileInfo::exists(musicPath)) {
+        const QString message = "Background music not found: " + musicPath;
+        qWarning() << message;
+        statusBar()->showMessage(message, 3500);
+        return;
+    }
+
+    backgroundAudio_ = new QAudioOutput(this);
+    backgroundAudio_->setVolume(0.45);
+
+    backgroundMusic_ = new QMediaPlayer(this);
+    backgroundMusic_->setAudioOutput(backgroundAudio_);
+    backgroundMusic_->setLoops(QMediaPlayer::Infinite);
+    backgroundMusic_->setSource(QUrl::fromLocalFile(musicPath));
+
+    connect(backgroundMusic_, &QMediaPlayer::errorOccurred, this,
+            [this](QMediaPlayer::Error, const QString& errorString) {
+                const QString message = "Background music error: " + errorString;
+                qWarning() << message;
+                statusBar()->showMessage(message, 3500);
+            });
+
+    backgroundMusic_->play();
 }
 
 QString MainWindow::phaseText() const {

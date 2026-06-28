@@ -10,7 +10,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia)
 
 if(WIN32)
     find_program(WINDEPLOYQT_EXECUTABLE
@@ -49,7 +49,7 @@ target_link_libraries(stage2_tests PRIVATE synera_core)
 add_executable(stage3_tests tests/test_stage3.cpp)
 target_link_libraries(stage3_tests PRIVATE synera_core)
 
-add_executable(synera_gui
+add_executable(synera_gui WIN32
     src/gui/AssetManager.cpp
     src/gui/BenchWidget.cpp
     src/gui/BoardWidget.cpp
@@ -63,8 +63,9 @@ add_executable(synera_gui
     src/gui/SynergyPanel.cpp
     src/gui/main_gui.cpp
 )
-target_link_libraries(synera_gui PRIVATE synera_core Qt6::Widgets)
+target_link_libraries(synera_gui PRIVATE synera_core Qt6::Widgets Qt6::Multimedia)
 target_compile_definitions(synera_gui PRIVATE SYNERA_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+set_target_properties(synera_gui PROPERTIES OUTPUT_NAME Synera)
 
 add_executable(gui_layout_tests
     tests/test_gui_layout.cpp
@@ -80,8 +81,16 @@ add_executable(gui_layout_tests
     src/gui/ShopPanel.cpp
     src/gui/SynergyPanel.cpp
 )
-target_link_libraries(gui_layout_tests PRIVATE synera_core Qt6::Widgets)
+target_link_libraries(gui_layout_tests PRIVATE synera_core Qt6::Widgets Qt6::Multimedia)
 target_compile_definitions(gui_layout_tests PRIVATE SYNERA_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+
+foreach(SYNERA_TEST_TARGET stage1_tests stage2_tests stage3_tests gui_layout_tests)
+    if(MSVC)
+        target_compile_options(${SYNERA_TEST_TARGET} PRIVATE $<$<CONFIG:Release>:/UNDEBUG>)
+    else()
+        target_compile_options(${SYNERA_TEST_TARGET} PRIVATE $<$<CONFIG:Release>:-UNDEBUG>)
+    endif()
+endforeach()
 
 add_custom_command(TARGET synera_gui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

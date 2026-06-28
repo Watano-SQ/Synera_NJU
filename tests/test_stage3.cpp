@@ -21,7 +21,6 @@ CombatConfig stage3Config() {
     CombatConfig config;
     config.attackInterval = 1;
     config.moveInterval = 1;
-    config.manaPerAttack = 60;
     config.itemDropPercent = 0;
     return config;
 }
@@ -56,6 +55,14 @@ const SynergyStatus* findSynergy(const GameState& game, const std::string& trait
         }
     }
     return nullptr;
+}
+
+void deployUnit(GameState& game, UnitId id, Position position) {
+    const Unit* unit = game.unit(id);
+    assert(unit != nullptr);
+    assert(unit->placement().kind == PlacementKind::BenchSlot);
+    assert(unit->placement().benchSlot.has_value());
+    assert(game.deployFromBench(*unit->placement().benchSlot, position));
 }
 
 std::filesystem::path findAssetRoot() {
@@ -99,6 +106,32 @@ void testInitialShopPurchaseAndRefresh() {
     for (const auto& offer : game.shopOffers()) {
         assert(offer.has_value());
         assert(evolvedVisualOnlyIds().find(offer->definitionId) == evolvedVisualOnlyIds().end());
+    }
+}
+
+void testResolveRoundAutoRefreshesShopForFree() {
+    GameState game(8, 8, 8, stage3Config());
+    game.player().setGold(20);
+
+    const int cost = game.shopOffers()[0]->cost;
+    assert(game.purchaseShopSlot(0).success);
+    assert(!game.shopOffers()[0].has_value());
+    const int goldAfterPurchase = 20 - cost;
+
+    const UnitId striker = game.addUnitToBench(unitFromDefinition("peashooter"));
+    Unit* strikerUnit = game.unit(striker);
+    assert(strikerUnit != nullptr);
+    strikerUnit->setBaseStats(UnitStats{500, 999, 10, 60, 1, 1});
+    deployUnit(game, striker, Position{7, 4});
+
+    assert(game.startCombat().success);
+    assert(game.tickCombat().success);
+    assert(game.phase() == GamePhase::Resolve);
+    assert(game.resolveRound().success);
+    assert(game.phase() == GamePhase::Prep);
+    assert(game.player().gold() == goldAfterPurchase + stage3Config().victoryGold);
+    for (const auto& offer : game.shopOffers()) {
+        assert(offer.has_value());
     }
 }
 
@@ -151,7 +184,7 @@ void testMergeKeepsNewestAndReturnsRemovedEquipment() {
     assert(kept->definitionId() == "peashooter");
     assert(kept->star() == 2);
     assert(displayVisualKey(*kept) == "units/repeater");
-    assert(kept->factoryKey() == "BasicUnit");
+    assert(kept->factoryKey() == "PeaBurst");
     assert(kept->traits().size() == 1 && kept->traits().front() == "shooter");
     assert(kept->placement().kind == PlacementKind::BenchSlot);
     assert(*kept->placement().benchSlot == 2);
@@ -194,10 +227,10 @@ void testSynergyDedupAndCombatFreeze() {
     game.addUnitToBench(unitFromDefinition("peashooter"));
     assert(game.deployFromBench(0, Position{7, 0}));
     assert(game.deployFromBench(1, Position{7, 1}));
-    const SynergyStatus* shooterDedup = findSynergy(game, "shooter");
-    assert(shooterDedup != nullptr);
-    assert(shooterDedup->count == 1);
-    assert(!shooterDedup->active);
+    const SynergyStatus* shooterPair = findSynergy(game, "shooter");
+    assert(shooterPair != nullptr);
+    assert(shooterPair->count == 2);
+    assert(shooterPair->active);
 
     GameState combatGame(8, 8, 8, stage3Config());
     const UnitId shooterA = combatGame.addUnitToBench(unitFromDefinition("peashooter"));
@@ -213,14 +246,40 @@ void testSynergyDedupAndCombatFreeze() {
     assert(frozenShooter != nullptr && frozenShooter->active && frozenShooter->count == 2);
 }
 
+void testTallnutAndWallnutsUnlockNutSynergy() {
+    GameState game(8, 8, 8, stage3Config());
+    game.player().setUnitCap(4);
+
+    const UnitId tallnut = game.addUnitToBench(unitFromDefinition("wallnut"));
+    Unit* tallnutUnit = game.unit(tallnut);
+    assert(tallnutUnit != nullptr);
+    tallnutUnit->setStar(2);
+    const UnitId wallnutA = game.addUnitToBench(unitFromDefinition("wallnut"));
+    const UnitId wallnutB = game.addUnitToBench(unitFromDefinition("wallnut"));
+
+    deployUnit(game, tallnut, Position{7, 0});
+    deployUnit(game, wallnutA, Position{7, 1});
+    deployUnit(game, wallnutB, Position{7, 2});
+
+    const SynergyStatus* nut = findSynergy(game, "nut");
+    assert(nut != nullptr);
+    assert(nut->count == 3);
+    assert(nut->active);
+    assert(nut->activeThreshold == 2);
+    assert(game.unit(tallnut)->maxHp() > game.unit(tallnut)->baseStats().maxHp);
+}
+
 void testEquipmentStats() {
     GameState game(8, 8, 8, stage3Config());
     const UnitId crystalTarget = game.addUnitToBench(unitFromDefinition("peashooter"));
+    const int crystalBaseMaxMana = game.unit(crystalTarget)->maxMana();
+    const int crystalBaseSkillCost = game.unit(crystalTarget)->skillManaCost();
     game.unit(crystalTarget)->setMana(60);
     const ItemId crystal = game.addItemToInventory("chlorophyll");
     assert(game.equipItem(crystal, crystalTarget).success);
-    assert(game.unit(crystalTarget)->maxMana() == 30);
-    assert(game.unit(crystalTarget)->mana() == 30);
+    assert(game.unit(crystalTarget)->maxMana() == crystalBaseMaxMana);
+    assert(game.unit(crystalTarget)->mana() == 60);
+    assert(game.unit(crystalTarget)->skillManaCost() == crystalBaseSkillCost - 20);
 
     const UnitId gloveTarget = game.addUnitToBench(unitFromDefinition("sunflower"));
     const UnitId untouched = game.addUnitToBench(unitFromDefinition("puffshroom"));
@@ -236,6 +295,49 @@ void testEquipmentStats() {
     const ItemId shell = game.addItemToInventory("pumpkin_shell");
     assert(game.equipItem(shell, shellTarget).success);
     assert(game.unit(shellTarget)->maxHp() == shellBase + 150);
+}
+
+void testFungusSynergyReducesSkillCostWithoutChangingMaxMana() {
+    GameState game(8, 8, 8, stage3Config());
+    const UnitId puff = game.addUnitToBench(unitFromDefinition("puffshroom"));
+    const UnitId fume = game.addUnitToBench(unitFromDefinition("fumeshroom"));
+    const int puffBaseMaxMana = game.unit(puff)->maxMana();
+    const int puffBaseSkillCost = game.unit(puff)->skillManaCost();
+
+    assert(game.deployFromBench(0, Position{7, 0}));
+    assert(game.deployFromBench(1, Position{7, 1}));
+
+    const SynergyStatus* fungus = findSynergy(game, "fungus");
+    assert(fungus != nullptr);
+    assert(fungus->active);
+    assert(fungus->activeThreshold == 2);
+    assert(game.unit(puff)->maxMana() == puffBaseMaxMana);
+    assert(game.unit(puff)->skillManaCost() == puffBaseSkillCost - 10);
+    assert(game.unit(fume)->skillManaCost() == 35);
+}
+
+void testPeashooterAndPuffshroomHaveActiveBurstSkill() {
+    GameState peaGame(2, 8, 8, stage3Config());
+    const UnitId pea = peaGame.addUnitToBench(unitFromDefinition("peashooter"));
+    assert(peaGame.unit(pea)->hasActiveSkill());
+    assert(peaGame.deployFromBench(0, Position{1, 4}));
+    assert(peaGame.startCombat().success);
+    peaGame.unit(pea)->setMana(peaGame.unit(pea)->skillManaCost());
+    const UnitId peaTarget = peaGame.currentEnemyUnits().front();
+    const int peaTargetHp = peaGame.unit(peaTarget)->hp();
+    assert(peaGame.tickCombat().success);
+    assert(peaGame.unit(peaTarget)->hp() == peaTargetHp - peaGame.unit(pea)->atk() * 2);
+
+    GameState puffGame(2, 8, 8, stage3Config());
+    const UnitId puff = puffGame.addUnitToBench(unitFromDefinition("puffshroom"));
+    assert(puffGame.unit(puff)->hasActiveSkill());
+    assert(puffGame.deployFromBench(0, Position{1, 4}));
+    assert(puffGame.startCombat().success);
+    puffGame.unit(puff)->setMana(puffGame.unit(puff)->skillManaCost());
+    const UnitId puffTarget = puffGame.currentEnemyUnits().front();
+    const int puffTargetHp = puffGame.unit(puffTarget)->hp();
+    assert(puffGame.tickCombat().success);
+    assert(puffGame.unit(puffTarget)->hp() == puffTargetHp - puffGame.unit(puff)->atk() * 2);
 }
 
 void testSunSynergyAddsOnlyVictoryGold() {
@@ -315,6 +417,32 @@ void testCatalogAndAssetKeysAreValid() {
     for (const std::string& visualKey : enemyVisualKeys) {
         assert(assetExists(assetRoot, visualKey));
     }
+}
+
+void testBossRoundTemplateIsStrongerThanPreviousEliteRound() {
+    const std::vector<EnemyTemplate> fourthRound = EncounterGenerator::templatesForRound(4);
+    const std::vector<EnemyTemplate> fifthRound = EncounterGenerator::templatesForRound(5);
+
+    int strongestFourthHp = 0;
+    for (const EnemyTemplate& enemyTemplate : fourthRound) {
+        if (enemyTemplate.stats.maxHp > strongestFourthHp) {
+            strongestFourthHp = enemyTemplate.stats.maxHp;
+        }
+    }
+
+    const EnemyTemplate* boss = nullptr;
+    for (const EnemyTemplate& enemyTemplate : fifthRound) {
+        for (const std::string& trait : enemyTemplate.traits) {
+            if (trait == "boss") {
+                boss = &enemyTemplate;
+            }
+        }
+    }
+
+    assert(boss != nullptr);
+    assert(boss->visualKey == "enemies/football_zombie");
+    assert(boss->stats.maxHp > strongestFourthHp);
+    assert(boss->stats.atk >= 55);
 }
 
 void writeInvalidDefinitionSave(const std::string& path) {
@@ -405,14 +533,19 @@ void testSaveLoadRoundTripRestoresAuthoritativeState() {
 
 int main() {
     testInitialShopPurchaseAndRefresh();
+    testResolveRoundAutoRefreshesShopForFree();
     testBusinessApisArePrepOnlyAndCombatSaveRejected();
     testPopulationLimitAndUpgrade();
     testMergeKeepsNewestAndReturnsRemovedEquipment();
     testRepeatedRecomputeDoesNotRepeatHpDeltaAndStarStats();
     testSynergyDedupAndCombatFreeze();
+    testTallnutAndWallnutsUnlockNutSynergy();
     testEquipmentStats();
+    testFungusSynergyReducesSkillCostWithoutChangingMaxMana();
+    testPeashooterAndPuffshroomHaveActiveBurstSkill();
     testSunSynergyAddsOnlyVictoryGold();
     testCatalogAndAssetKeysAreValid();
+    testBossRoundTemplateIsStrongerThanPreviousEliteRound();
     testLoadFailureLeavesOriginalStateUntouched();
     testSaveLoadRoundTripRestoresAuthoritativeState();
     return 0;

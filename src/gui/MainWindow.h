@@ -10,8 +10,10 @@
 #include "SynergyPanel.h"
 #include "core/GameState.h"
 
+#include <QAudioOutput>
 #include <QLabel>
 #include <QMainWindow>
+#include <QMediaPlayer>
 #include <QPushButton>
 #include <QTimer>
 
@@ -22,9 +24,11 @@ namespace synera::gui {
 class FlagMeterWidget;
 class StatusIconWidget;
 
+// GUI 主窗口持有 GameState，并把各个面板的用户操作接到核心规则接口上。
 class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
 
     void refreshFromState();
 
@@ -42,6 +46,7 @@ private:
     void startCombat();
     void advanceCombat();
     void resolveRound();
+    void startBackgroundMusic();
     QString phaseText() const;
 
     GameState game_;
@@ -66,6 +71,8 @@ private:
     QPushButton* startCombatButton_ = nullptr;
     QPushButton* resolveButton_ = nullptr;
     QTimer* combatTimer_ = nullptr;
+    QMediaPlayer* backgroundMusic_ = nullptr;
+    QAudioOutput* backgroundAudio_ = nullptr;
     std::optional<UnitId> selectedUnit_;
     std::optional<ItemId> selectedItem_;
 };

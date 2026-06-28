@@ -48,6 +48,7 @@ public:
     }
 
     void refreshFromState() {
+        // 绘制前缓存一份库存列表，避免 paintEvent 里反复构造 vector。
         inventory_ = game_->equipmentInventory();
         updateGeometry();
         update();
@@ -59,6 +60,7 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing, true);
 
         const QRect tray = trayRect();
+        // 优先使用 PvZ 风格托盘资源，缺失时绘制一个简单背景。
         const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline_tray") : nullptr;
         if (background != nullptr) {
             drawPixmapAspectFit(painter, tray, *background);
@@ -69,6 +71,7 @@ protected:
         }
 
         constexpr int kVisibleSlots = 4;
+        // 托盘资源当前只设计了 4 个可见槽位，多余装备仍在 fallback 按钮列表中可显示。
         for (int i = 0; i < kVisibleSlots; ++i) {
             const QRect slot = slotRect(i);
             painter.setPen(QPen(QColor(24, 18, 12, 200), 2));
@@ -99,6 +102,7 @@ protected:
     }
 
     void mousePressEvent(QMouseEvent* event) override {
+        // 选择装备只在 Prep 阶段允许，选中后由 MainWindow 等待玩家点击单位穿戴。
         if (event->button() != Qt::LeftButton || game_->phase() != GamePhase::Prep) {
             return;
         }
@@ -119,6 +123,7 @@ protected:
 
 private:
     QRect trayRect() const {
+        // 根据背景图片比例计算托盘矩形，保证不同资源尺寸下仍居中显示。
         const QPixmap* background = assets_ != nullptr ? assets_->pixmapFor("ui/zombieline_tray") : nullptr;
         const QSize sourceSize = background != nullptr && !background->isNull() ? background->size() : QSize(190, 38);
         const int maxWidth = std::max(1, width() - 16);
@@ -135,6 +140,7 @@ private:
 
     QRect slotRect(int index) const {
         const QRect tray = trayRect();
+        // 槽位中心是按背景图比例估算的，和生成的托盘素材对齐。
         static constexpr double kCenters[] = {0.45, 0.58, 0.71, 0.84};
         constexpr int kSlotSize = 48;
         const int centerX = tray.left() + static_cast<int>(std::round(tray.width() * kCenters[index]));
@@ -192,6 +198,7 @@ void EquipmentPanel::setItemSelectedCallback(ItemSelectedCallback callback) {
 }
 
 void EquipmentPanel::refreshFromState() {
+    // fallback 按钮列表每次刷新重建，避免装备穿戴后残留旧按钮。
     while (QLayoutItem* item = itemLayout_->takeAt(0)) {
         delete item->widget();
         delete item;
@@ -199,6 +206,7 @@ void EquipmentPanel::refreshFromState() {
 
     const auto inventory = game_->equipmentInventory();
     const bool useTray = assets_ != nullptr && assets_->pixmapFor("ui/zombieline_tray") != nullptr;
+    // 有托盘资源时走自绘托盘；资源缺失时退回普通按钮列表。
     trayWidget_->setVisible(useTray);
     emptyLabel_->setVisible(!useTray && inventory.empty());
 

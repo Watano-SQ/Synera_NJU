@@ -12,6 +12,7 @@ QRect aspectFitRect(QRect target, QSize sourceSize) {
         return {};
     }
 
+    // KeepAspectRatio 得到完整显示所需尺寸，再手动居中。
     const QSize scaled = sourceSize.scaled(target.size(), Qt::KeepAspectRatio);
     return QRect(QPoint(target.center().x() - scaled.width() / 2,
                        target.center().y() - scaled.height() / 2),
@@ -32,6 +33,7 @@ void drawPixmapCroppedToFill(QPainter& painter, QRect target, const QPixmap& pix
     }
 
     QRect source(0, 0, pixmap.width(), pixmap.height());
+    // 比较宽高比，裁掉多余的一边，让图片填满目标矩形。
     const double sourceRatio = static_cast<double>(source.width()) / std::max(1, source.height());
     const double targetRatio = static_cast<double>(target.width()) / std::max(1, target.height());
 

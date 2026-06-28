@@ -28,6 +28,7 @@ constexpr int kPaddingLeft = 6;
 constexpr int kPaddingTop = 14;
 
 QString shortLabel(const Unit& unit, UnitId id) {
+    // 资源缺失时用 P/E + ID 作为最小可读占位。
     const QString prefix = unit.owner() == Owner::PlayerCtrl ? "P" : "E";
     return prefix + QString::number(id);
 }
@@ -36,6 +37,7 @@ QString shortLabel(const Unit& unit, UnitId id) {
 
 BenchWidget::BenchWidget(const GameState* game, AssetManager* assets, QWidget* parent)
     : QWidget(parent), game_(game), assets_(assets) {
+    // Bench 自己负责拖放事件，具体放置规则由 MainWindow/PlacementController 执行。
     setAcceptDrops(true);
     setMouseTracking(true);
     setFixedSize(sizeHint());
@@ -71,6 +73,7 @@ void BenchWidget::refreshFromState() {
 void BenchWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
+    // 绘制顺序：背景、槽位底、格线、单位、选择/悬停/落点覆盖层。
     painter.fillRect(rect(), QColor("#315c2c"));
     painter.setPen(QPen(QColor("#203d1e"), 2));
     painter.setBrush(QColor(72, 119, 53, 190));
@@ -112,6 +115,7 @@ void BenchWidget::paintEvent(QPaintEvent*) {
 }
 
 void BenchWidget::mousePressEvent(QMouseEvent* event) {
+    // 点击空白取消选择，点击单位则选择并准备可能的拖拽。
     pressedSlot_.reset();
     dropTargetSlot_.reset();
     if (event->button() != Qt::LeftButton) {
@@ -163,6 +167,7 @@ void BenchWidget::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
 
+    // Bench 拖拽只需要记录来源槽位，目标由接收控件决定。
     const auto id = game_->bench().occupant(*pressedSlot_);
     if (!id.has_value() || !canStartDrag(*id)) {
         pressedSlot_.reset();
@@ -191,6 +196,7 @@ void BenchWidget::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void BenchWidget::dragMoveEvent(QDragMoveEvent* event) {
+    // 记录当前可落下的槽位，用于绘制虚线边框。
     if (event->mimeData()->hasFormat(kUnitDragMimeType) && slotAt(event->position().toPoint()).has_value()) {
         dropTargetSlot_ = slotAt(event->position().toPoint());
         update();
@@ -210,6 +216,7 @@ void BenchWidget::dragLeaveEvent(QDragLeaveEvent* event) {
 void BenchWidget::dropEvent(QDropEvent* event) {
     UnitDragData data;
     const auto targetSlot = slotAt(event->position().toPoint());
+    // 成功解码后把拖拽数据和目标槽位交给回调处理。
     if (!targetSlot.has_value() || !decodeDragData(event->mimeData()->data(kUnitDragMimeType), data)) {
         dropTargetSlot_.reset();
         update();
@@ -232,6 +239,7 @@ void BenchWidget::leaveEvent(QEvent* event) {
 }
 
 std::optional<int> BenchWidget::slotAt(const QPoint& point) const {
+    // Bench 槽位宽度和间距固定，遍历少量槽位比手写反推更直接。
     for (int slot = 0; slot < static_cast<int>(game_->bench().capacity()); ++slot) {
         if (slotRect(slot).contains(point)) {
             return slot;
@@ -277,6 +285,7 @@ void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
     const QRect unitTarget = rect.adjusted(6, 4, -6, -12);
     const QPixmap* pixmap = assets_ != nullptr ? assets_->pixmapFor(displayVisualKey(*unit)) : nullptr;
     if (pixmap != nullptr) {
+        // 有资源时显示图片；没有资源时用简单色块保证界面仍可理解。
         drawPixmapAspectFit(painter, unitTarget, *pixmap);
     } else {
         painter.setPen(Qt::NoPen);
@@ -292,6 +301,7 @@ void BenchWidget::drawUnit(QPainter& painter, const QRect& rect, UnitId id) cons
 
 void BenchWidget::drawHpManaBars(QPainter& painter, const QRect& rect, const Unit& unit) const {
     painter.save();
+    // Bench 也显示生命/法力，方便观察装备或羁绊带来的数值变化。
     const int hpWidth = std::max(1, rect.width() * unit.hp() / std::max(1, unit.maxHp()));
     const int manaWidth = std::max(1, rect.width() * unit.mana() / std::max(1, unit.maxMana()));
     const QRect hpBack(rect.left(), rect.bottom() - 10, rect.width(), 4);

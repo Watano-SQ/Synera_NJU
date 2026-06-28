@@ -25,12 +25,14 @@ namespace synera {
 namespace {
 
 int distanceSquared(Position a, Position b) {
+    // 战斗范围只需要比较大小，用距离平方可以避免开方。
     const int dr = a.row - b.row;
     const int dc = a.col - b.col;
     return dr * dr + dc * dc;
 }
 
 int positionKey(const Board& board, Position position) {
+    // 把二维位置压成唯一整数，方便放进 set/map 做冲突检测。
     return position.row * board.cols() + position.col;
 }
 
@@ -39,6 +41,7 @@ Owner opposingOwner(Owner owner) {
 }
 
 std::optional<Position> boardPositionOf(const Unit* unit) {
+    // 只有棋盘上的单位才参与寻路、攻击距离和范围技能。
     if (unit == nullptr || unit->placement().kind != PlacementKind::BoardCell) {
         return std::nullopt;
     }
@@ -46,12 +49,21 @@ std::optional<Position> boardPositionOf(const Unit* unit) {
 }
 
 bool hasTrait(const Unit& unit, const std::string& trait) {
+    // 羁绊判断基于稳定 traitId，不依赖可能乱码的显示名。
     const auto& traits = unit.traits();
     return std::find(traits.begin(), traits.end(), trait) != traits.end();
 }
 
 int percentAdjusted(int value, int percentDelta) {
+    // 攻击间隔类加成使用百分比，并保证结果至少为 1 tick。
     return std::max(1, value + (value * percentDelta) / 100);
+}
+
+int adjustedSkillManaCost(int value, int delta) {
+    if (value <= 0) {
+        return 0;
+    }
+    return std::max(10, value + delta);
 }
 
 std::string placementKindToken(PlacementKind kind) {
@@ -126,6 +138,7 @@ GameState::GameState(int rows, int cols, std::size_t benchCapacity, CombatConfig
       combatConfig_(combatConfig),
       shopOffers_(5),
       rng_(std::random_device{}()) {
+    // 新游戏默认先生成一组免费商店，之后刷新才会扣金币。
     generateShopOffersFree();
 }
 
@@ -184,6 +197,7 @@ const std::vector<std::optional<ShopOffer>>& GameState::shopOffers() const {
 std::vector<ItemInstance> GameState::equipmentInventory() const {
     std::vector<ItemInstance> result;
     result.reserve(equipmentInventory_.size());
+    // inventory_ 只保存 itemId，返回给外部时展开成完整实例并排序。
     for (ItemId itemId : equipmentInventory_) {
         const auto it = itemInstances_.find(itemId);
         if (it != itemInstances_.end()) {
@@ -210,6 +224,7 @@ const std::vector<SynergyStatus>& GameState::activeSynergies() const {
 
 int GameState::deployedPlayerUnitCount() const {
     int count = 0;
+    // 人口只统计已经上场的玩家单位，Bench 中的单位不占人口。
     for (int row = 0; row < board_.rows(); ++row) {
         for (int col = 0; col < board_.cols(); ++col) {
             const auto occupant = board_.occupant(Position{row, col});
@@ -245,6 +260,7 @@ ItemId GameState::addItemToInventory(const std::string& itemDefId) {
     if (findItemDefinition(itemDefId) == nullptr) {
         throw std::invalid_argument("Unknown item definition id.");
     }
+    // itemDefId 是装备类型，itemId 是这件装备实例的唯一编号。
     const ItemId itemId = nextItemId_++;
     itemInstances_.emplace(itemId, ItemInstance{itemId, itemDefId});
     equipmentInventory_.push_back(itemId);
@@ -252,6 +268,7 @@ ItemId GameState::addItemToInventory(const std::string& itemDefId) {
 }
 
 ActionResult GameState::refreshShop() {
+    // 商店操作只允许在 Prep，战斗中不能改变阵容来源。
     if (phase_ != GamePhase::Prep) {
         return {false, "只能在准备阶段刷新商店。"};
     }
@@ -265,6 +282,7 @@ ActionResult GameState::refreshShop() {
 }
 
 ActionResult GameState::purchaseShopSlot(std::size_t index) {
+    // 购买流程：校验阶段/槽位/金币/Bench 空位，创建单位，再尝试三合一。
     if (phase_ != GamePhase::Prep) {
         return {false, "只能在准备阶段种下植物。"};
     }
@@ -297,6 +315,7 @@ ActionResult GameState::purchaseShopSlot(std::size_t index) {
 }
 
 ActionResult GameState::upgradePopulation() {
+    // 人口升级同时提高 level 和上场上限，花费随当前等级递增。
     if (phase_ != GamePhase::Prep) {
         return {false, "只能在准备阶段升级人口。"};
     }
@@ -317,6 +336,7 @@ ActionResult GameState::upgradePopulation() {
 }
 
 ActionResult GameState::equipItem(ItemId itemId, UnitId unitId) {
+    // 装备从库存移动到单位身上。当前规则限制每个单位最多装备一件。
     if (phase_ != GamePhase::Prep) {
         return {false, "只能在准备阶段穿戴装备。"};
     }
@@ -346,6 +366,7 @@ UnitStats GameState::computeEffectiveStats(UnitId id) {
     }
 
     UnitStats stats = target->baseStats();
+    // 最终属性 = 基础属性 + 星级倍率 + 装备 + 当前激活羁绊。
     if (target->star() == 2) {
         stats.maxHp = static_cast<int>(std::lround(stats.maxHp * 1.7));
         stats.atk = static_cast<int>(std::lround(stats.atk * 1.7));
@@ -365,6 +386,9 @@ UnitStats GameState::computeEffectiveStats(UnitId id) {
                 case ItemEffectType::MaxMana:
                     stats.maxMana = std::max(10, stats.maxMana + definition->value);
                     break;
+                case ItemEffectType::SkillManaCost:
+                    stats.skillManaCost = adjustedSkillManaCost(stats.skillManaCost, definition->value);
+                    break;
                 case ItemEffectType::AttackIntervalPercent:
                     stats.attackInterval = percentAdjusted(stats.attackInterval, definition->value);
                     break;
@@ -381,7 +405,7 @@ UnitStats GameState::computeEffectiveStats(UnitId id) {
         } else if (synergy.trait == "nut") {
             stats.maxHp += synergy.activeThreshold >= 4 ? 450 : 200;
         } else if (synergy.trait == "fungus") {
-            stats.maxMana = std::max(10, stats.maxMana + (synergy.activeThreshold >= 4 ? -25 : -10));
+            stats.skillManaCost = adjustedSkillManaCost(stats.skillManaCost, synergy.activeThreshold >= 4 ? -25 : -10);
         } else if (synergy.trait == "spike") {
             stats.atk += 15;
         }
@@ -392,6 +416,7 @@ UnitStats GameState::computeEffectiveStats(UnitId id) {
 }
 
 ActionResult GameState::saveToFile(const std::string& path) const {
+    // 战斗中存在临时敌人、冷却和移动提案，当前存档格式只保存非 Combat 状态。
     if (phase_ == GamePhase::Combat) {
         return {false, "守家阶段不能存档。"};
     }
@@ -402,6 +427,7 @@ ActionResult GameState::saveToFile(const std::string& path) const {
     }
 
     out << "SYNERA_SAVE 1\n";
+    // 存档使用稳定的文本格式，便于测试和手工排查。
     out << "BOARD " << board_.rows() << ' ' << board_.cols() << "\n";
     out << "BENCH " << bench_.capacity() << "\n";
     out << "PLAYER " << player_.hp() << ' ' << player_.gold() << ' ' << player_.level() << ' '
@@ -428,6 +454,7 @@ ActionResult GameState::saveToFile(const std::string& path) const {
     for (ItemId itemId : itemIds) {
         const ItemInstance& instance = itemInstances_.at(itemId);
         UnitId equippedBy = 0;
+        // 装备实例本身存在 itemInstances_，位置可能是库存或某个单位身上。
         for (UnitId unitId : units_.ids()) {
             const Unit* candidate = unit(unitId);
             if (candidate != nullptr && candidate->equippedItemId() == itemId) {
@@ -486,6 +513,7 @@ ActionResult GameState::loadFromFile(const std::string& path) {
     }
 
     auto fail = [](const std::string& message) { return ActionResult{false, message}; };
+    // 先读入临时 GameState，全部校验通过后再 move 到 *this，避免坏存档污染当前游戏。
     std::string tag;
     int version = 0;
     if (!(in >> tag >> version) || tag != "SYNERA_SAVE" || version != 1) {
@@ -503,6 +531,7 @@ ActionResult GameState::loadFromFile(const std::string& path) {
     }
 
     GameState temp(rows, cols, benchCapacity, combatConfig_);
+    // 构造函数会生成默认商店，这里清空后按存档逐段恢复。
     temp.shopOffers_.assign(5, std::nullopt);
     temp.itemInstances_.clear();
     temp.equipmentInventory_.clear();
@@ -567,6 +596,7 @@ ActionResult GameState::loadFromFile(const std::string& path) {
     }
 
     std::unordered_map<ItemId, std::pair<std::string, UnitId>> itemLocations;
+    // 先记录装备实例及位置，等单位全部创建后再校验 EQUIPPED 归属。
     std::size_t itemCount = 0;
     if (!(in >> tag >> itemCount) || tag != "ITEMS") {
         return fail("Invalid items section.");
@@ -594,6 +624,7 @@ ActionResult GameState::loadFromFile(const std::string& path) {
         int mana = 0;
     };
     std::vector<PendingVitals> pendingVitals;
+    // 读单位时先恢复定义、星级、装备和位置，生命/法力要等最终属性计算后再写回。
     std::unordered_set<UnitId> seenUnitIds;
     std::set<std::size_t> occupiedBenchSlots;
     std::set<int> occupiedBoardCells;
@@ -703,6 +734,7 @@ ActionResult GameState::loadFromFile(const std::string& path) {
     temp.rebuildOccupancyFromUnitPlacements();
     temp.activeSynergies_ = temp.computeSynergiesFromBoard();
     temp.recomputeAllPlayerEffectiveStats();
+    // 属性恢复完成后再钳制 HP/Mana，防止装备和羁绊改变上限后数值不合法。
     for (const PendingVitals& vitals : pendingVitals) {
         Unit* loadedUnit = temp.unit(vitals.id);
         if (loadedUnit != nullptr) {
@@ -729,6 +761,7 @@ UnitId GameState::addUnitToBench(std::unique_ptr<Unit> unit) {
 
     const UnitId id = units_.add(std::move(unit));
     Unit* added = units_.get(id);
+    // acquireSeq 用来在三合一时保留最新获得的那个单位。
     added->setAcquireSeq(nextAcquireSeq_++);
     added->setEffectiveStats(added->baseStats());
     added->setPlacement(Placement::bench(*slot));
@@ -739,6 +772,7 @@ UnitId GameState::addUnitToBench(std::unique_ptr<Unit> unit) {
 }
 
 bool GameState::deployFromBench(std::size_t slot, Position target, PlacementPolicy policy) {
+    // 从 Bench 部署到棋盘。空格直接放置，占用格只有 Swap 策略才会交换。
     if (phase_ != GamePhase::Prep) {
         return false;
     }
@@ -755,6 +789,7 @@ bool GameState::deployFromBench(std::size_t slot, Position target, PlacementPoli
 
     const auto targetId = board_.occupant(target);
     if (!targetId.has_value()) {
+        // 上场人口只在从 Bench 放到棋盘空格时增加。
         if (moving->owner() == Owner::PlayerCtrl && deployedPlayerUnitCount() >= player_.unitCap()) {
             return false;
         }
@@ -779,6 +814,7 @@ bool GameState::deployFromBench(std::size_t slot, Position target, PlacementPoli
 }
 
 bool GameState::moveBoardUnit(Position from, Position to, PlacementPolicy policy) {
+    // 棋盘内移动只允许在 Prep；战斗中的移动由 tickCombat 生成 MoveProposal。
     if (phase_ != GamePhase::Prep) {
         return false;
     }
@@ -820,6 +856,7 @@ bool GameState::moveBoardUnit(Position from, Position to, PlacementPolicy policy
 }
 
 bool GameState::returnToBench(Position from, std::size_t slot) {
+    // 只有玩家单位可以回 Bench，敌人永远停留在敌方半场或被清理。
     if (phase_ != GamePhase::Prep) {
         return false;
     }
@@ -842,6 +879,7 @@ bool GameState::returnToBench(Position from, std::size_t slot) {
 }
 
 std::vector<UnitId> GameState::generateEnemiesForRound(int round) {
+    // CLI/测试用的显式生成接口；GUI 正式开战时 startCombat 会重新规划敌人。
     clearAllEnemyUnits();
     player_.setCurrentRound(round);
     currentEnemyUnits_ = EncounterGenerator::generate(*this, round);
@@ -849,6 +887,7 @@ std::vector<UnitId> GameState::generateEnemiesForRound(int round) {
 }
 
 ActionResult GameState::startCombat() {
+    // Prep -> Combat：冻结当前上场羁绊，记录玩家站位快照，再生成本波敌人。
     if (phase_ != GamePhase::Prep) {
         return {false, "只能在准备阶段开始守家。"};
     }
@@ -860,6 +899,7 @@ ActionResult GameState::startCombat() {
     recomputeAllPlayerEffectiveStats();
     const std::vector<UnitId> ar = activePlayerUnits();
     if (ar.empty()) {
+        // 没有上场单位时直接进入失败结算，不生成敌人。
         clearAllEnemyUnits();
         playerCombatSnapshot_.clear();
         runtime_.clear();
@@ -876,6 +916,7 @@ ActionResult GameState::startCombat() {
     clearAllEnemyUnits();
     playerCombatSnapshot_.clear();
     playerCombatSnapshot_.reserve(ar.size());
+    // 快照只记录玩家战前位置，结算时用它把阵容恢复到准备阶段。
     for (UnitId id : ar) {
         const Unit* playerUnit = unit(id);
         const auto position = boardPositionOf(playerUnit);
@@ -897,6 +938,7 @@ ActionResult GameState::startCombat() {
 }
 
 ActionResult GameState::tickCombat() {
+    // Combat 的一个 tick：选目标、决定攻击/施法/移动，最后统一应用结果。
     if (phase_ != GamePhase::Combat) {
         return {false, "只能在守家阶段推进战斗。"};
     }
@@ -908,6 +950,7 @@ ActionResult GameState::tickCombat() {
     std::vector<CombatEffect> healEvents;
     std::vector<MoveProposal> moveProposals;
 
+    // 遍历 active 的快照，不在循环中直接删除单位，避免迭代过程中状态相互污染。
     for (UnitId id : active) {
         Unit* actor = unit(id);
         if (actor == nullptr || !actor->isAlive() || actor->placement().kind != PlacementKind::BoardCell) {
@@ -935,14 +978,18 @@ ActionResult GameState::tickCombat() {
             }
 
             runtime.attackCooldown = std::min(combatConfig_.attackInterval, actor->attackInterval());
-            if (actor->maxMana() > 0 && actor->mana() >= actor->maxMana()) {
+            if (actor->hasActiveSkill() && actor->skillManaCost() > 0 && actor->mana() >= actor->skillManaCost() &&
+                runtime.skillCooldown == 0) {
+                // 法力和技能冷却都满足时释放主动技能，技能只向 damage/heal 队列追加效果。
                 actor->setState(UnitState::Casting);
                 SkillContext context(*this, id, targetId, damageEvents, healEvents);
                 actor->castSkill(context);
-                actor->setMana(0);
+                actor->setMana(actor->mana() - actor->skillManaCost());
+                runtime.skillCooldown = actor->skillCooldownTicks();
             } else {
+                // 普攻只造成伤害；法力由每 tick 的自然回复统一处理。
                 actor->setState(UnitState::Attacking);
-                damageEvents.push_back(CombatEffect{id, *targetId, actor->atk(), true});
+                damageEvents.push_back(CombatEffect{id, *targetId, actor->atk(), false});
             }
             continue;
         }
@@ -954,6 +1001,7 @@ ActionResult GameState::tickCombat() {
 
         const auto nextStep = nextStepTowardAttackRange(id, *targetId);
         if (nextStep.has_value()) {
+            // 移动先进入提案列表，稍后会统一做冲突检测。
             moveProposals.push_back(MoveProposal{id, *actor->placement().boardCell, *nextStep});
             runtime.moveCooldown = std::min(combatConfig_.moveInterval, actor->moveInterval());
             actor->setState(UnitState::Moving);
@@ -965,6 +1013,7 @@ ActionResult GameState::tickCombat() {
     applyCombatEffects(damageEvents, healEvents);
     clearDeadBoardOccupants();
     applyMoveProposals(moveProposals);
+    // 先处理伤害和死亡，再移动，防止单位移动进刚被击杀才腾出的格子时出现顺序歧义。
     checkCombatEnd();
 
     if (phase_ == GamePhase::Resolve) {
@@ -974,6 +1023,7 @@ ActionResult GameState::tickCombat() {
 }
 
 ActionResult GameState::resolveRound() {
+    // Resolve -> Prep/GameOver：清敌、恢复玩家站位，再根据胜败发奖励或扣血。
     if (phase_ != GamePhase::Resolve) {
         return {false, "只能在结算阶段完成本波结算。"};
     }
@@ -1016,6 +1066,10 @@ ActionResult GameState::resolveRound() {
         recomputePrepSynergiesAndStats();
     }
 
+    if (phase_ == GamePhase::Prep) {
+        generateShopOffersFree();
+    }
+
     return {true, message.empty() ? "本波已结算。" : message};
 }
 
@@ -1041,6 +1095,7 @@ const std::vector<UnitId>& GameState::currentEnemyUnits() const {
 }
 
 bool GameState::canOccupyHalf(const Unit& unit, Position position) const {
+    // 半场规则集中在这里，部署、移动和读档校验都复用同一判断。
     if (!board_.isInside(position)) {
         return false;
     }
@@ -1051,6 +1106,7 @@ bool GameState::canOccupyHalf(const Unit& unit, Position position) const {
 }
 
 UnitId GameState::addEnemyToBoard(std::unique_ptr<Unit> unit, Position position) {
+    // 敌人直接加入棋盘，不经过 Bench。
     if (!unit || unit->owner() != Owner::EnemyCtrl) {
         throw std::invalid_argument("Enemy spawns must be EnemyCtrl units.");
     }
@@ -1066,6 +1122,7 @@ UnitId GameState::addEnemyToBoard(std::unique_ptr<Unit> unit, Position position)
 }
 
 void GameState::clearGeneratedEnemies() {
+    // 只清理 currentEnemyUnits_ 记录的本波敌人，用于正常结算。
     for (UnitId id : currentEnemyUnits_) {
         Unit* enemy = units_.get(id);
         if (enemy != nullptr && enemy->placement().kind == PlacementKind::BoardCell) {
@@ -1077,6 +1134,7 @@ void GameState::clearGeneratedEnemies() {
 }
 
 void GameState::clearAllEnemyUnits() {
+    // 更强的清理函数，用于重新生成波次前确保棋盘没有残留敌人。
     const std::vector<UnitId> ids = units_.ids();
     for (UnitId id : ids) {
         Unit* enemy = units_.get(id);
@@ -1103,6 +1161,7 @@ void GameState::clearBoardOccupant(Position position) {
 }
 
 void GameState::clearBoardForSettlement() {
+    // 结算恢复前先清空棋盘占用，随后按玩家快照重新放回单位。
     for (int row = 0; row < board_.rows(); ++row) {
         for (int col = 0; col < board_.cols(); ++col) {
             const Position position{row, col};
@@ -1115,22 +1174,40 @@ void GameState::clearBoardForSettlement() {
 
 void GameState::initializeRuntime() {
     runtime_.clear();
+    // 开战时给每个单位一个初始攻击冷却，避免所有单位第一帧同时出手。
     for (UnitId id : activeCombatUnits()) {
-        const Unit* combatUnit = unit(id);
+        Unit* combatUnit = unit(id);
         const int attackInterval = combatUnit != nullptr ? std::min(combatConfig_.attackInterval, combatUnit->attackInterval())
                                                          : combatConfig_.attackInterval;
-        runtime_[id] = RuntimeState{attackInterval, 0, std::nullopt};
+        if (combatUnit != nullptr) {
+            combatUnit->setMana(combatUnit->initialMana());
+        }
+        RuntimeState state;
+        state.attackCooldown = attackInterval;
+        runtime_[id] = state;
     }
 }
 
 void GameState::updateCooldowns(const std::vector<UnitId>& activeUnits) {
     for (UnitId id : activeUnits) {
         RuntimeState& runtime = runtime_[id];
+        Unit* activeUnit = unit(id);
         if (runtime.attackCooldown > 0) {
             --runtime.attackCooldown;
         }
         if (runtime.moveCooldown > 0) {
             --runtime.moveCooldown;
+        }
+        if (runtime.skillCooldown > 0) {
+            --runtime.skillCooldown;
+        }
+        if (activeUnit != nullptr && activeUnit->isAlive() && activeUnit->manaRegenPerSecond() > 0) {
+            runtime.manaRegenRemainder += activeUnit->manaRegenPerSecond();
+            const int gainedMana = runtime.manaRegenRemainder / 60;
+            runtime.manaRegenRemainder %= 60;
+            if (gainedMana > 0) {
+                activeUnit->setMana(activeUnit->mana() + gainedMana);
+            }
         }
     }
 }
@@ -1156,6 +1233,7 @@ std::optional<UnitId> GameState::selectTarget(UnitId attackerId) const {
             continue;
         }
 
+        // 目标优先级：距离最近，其次血量更高，再按位置和 ID 保持确定性。
         const int distSq = distanceSquared(*attackerPosition, *candidatePosition);
         const bool better = !bestId.has_value() || distSq < bestDistSq ||
                             (distSq == bestDistSq && candidate->hp() > bestHp) ||
@@ -1192,6 +1270,7 @@ std::optional<Position> GameState::nextStepTowardAttackRange(UnitId attackerId, 
 
     const int rangeSq = attacker->range() * attacker->range();
     auto isGoal = [&](Position position) {
+        // 目标格不是敌人所在格，而是能站住且进入攻击范围的空格。
         return position != *targetPosition && board_.isEmpty(position) &&
                distanceSquared(position, *targetPosition) <= rangeSq;
     };
@@ -1205,6 +1284,7 @@ std::optional<Position> GameState::nextStepTowardAttackRange(UnitId attackerId, 
     std::vector<bool> visited(static_cast<std::size_t>(board_.rows() * board_.cols()), false);
     visited[static_cast<std::size_t>(positionKey(board_, *start))] = true;
 
+    // 广度优先搜索四方向最短路；Node 记录 firstStep，最终只返回下一步。
     const std::vector<Position> directions{{-1, 0}, {0, -1}, {0, 1}, {1, 0}};
     for (const Position& direction : directions) {
         const Position next{start->row + direction.row, start->col + direction.col};
@@ -1255,6 +1335,7 @@ bool GameState::isInAttackRange(const Unit& attacker, const Unit& target) const 
 void GameState::applyCombatEffects(const std::vector<CombatEffect>& damageEvents,
                                    const std::vector<CombatEffect>& healEvents) {
     std::unordered_map<UnitId, int> pendingHp;
+    // pendingHp 保存本 tick 的临时生命，多个伤害/治疗合并后再写回 Unit。
     auto hpFor = [&](UnitId id) -> int& {
         auto it = pendingHp.find(id);
         if (it == pendingHp.end()) {
@@ -1273,12 +1354,6 @@ void GameState::applyCombatEffects(const std::vector<CombatEffect>& damageEvents
         int& hp = hpFor(effect.target);
         hp = std::max(0, hp - effect.amount);
 
-        if (effect.grantsMana) {
-            Unit* source = unit(effect.source);
-            if (source != nullptr && source->isAlive()) {
-                source->setMana(source->mana() + combatConfig_.manaPerAttack);
-            }
-        }
     }
 
     for (const CombatEffect& effect : healEvents) {
@@ -1291,6 +1366,7 @@ void GameState::applyCombatEffects(const std::vector<CombatEffect>& damageEvents
         int amount = effect.amount;
         const Unit* source = unit(effect.source);
         if (source != nullptr && ownerHasActiveSynergy(source->owner(), "healer")) {
+            // healer 羁绊在结算治疗时统一放大治疗量。
             amount = amount * 125 / 100;
         }
         hp = std::min(target->maxHp(), hp + amount);
@@ -1305,13 +1381,22 @@ void GameState::applyCombatEffects(const std::vector<CombatEffect>& damageEvents
 }
 
 void GameState::applyMoveProposals(const std::vector<MoveProposal>& proposals) {
-    std::unordered_map<int, int> proposalCounts;
+    std::unordered_map<int, UnitId> chosenMoverByTarget;
     for (const MoveProposal& proposal : proposals) {
-        ++proposalCounts[positionKey(board_, proposal.to)];
+        const int targetKey = positionKey(board_, proposal.to);
+        auto [it, inserted] = chosenMoverByTarget.emplace(targetKey, proposal.unitId);
+        if (!inserted) {
+            it->second = std::min(it->second, proposal.unitId);
+        }
     }
 
     for (const MoveProposal& proposal : proposals) {
-        if (proposalCounts[positionKey(board_, proposal.to)] != 1) {
+        const auto chosen = chosenMoverByTarget.find(positionKey(board_, proposal.to));
+        if (chosen == chosenMoverByTarget.end() || chosen->second != proposal.unitId) {
+            Unit* blocked = unit(proposal.unitId);
+            if (blocked != nullptr && blocked->isAlive() && blocked->state() == UnitState::Moving) {
+                blocked->setState(UnitState::Idle);
+            }
             continue;
         }
 
@@ -1334,6 +1419,7 @@ void GameState::applyMoveProposals(const std::vector<MoveProposal>& proposals) {
 }
 
 void GameState::clearDeadBoardOccupants() {
+    // 死亡单位仍保留在 UnitManager 中一小段时间，但先从棋盘占用表移除。
     for (int row = 0; row < board_.rows(); ++row) {
         for (int col = 0; col < board_.cols(); ++col) {
             const Position position{row, col};
@@ -1355,6 +1441,7 @@ void GameState::clearDeadBoardOccupants() {
 }
 
 void GameState::checkCombatEnd() {
+    // 任一阵营没有存活棋盘单位时，战斗立即进入 Resolve。
     if (phase_ != GamePhase::Combat) {
         return;
     }
@@ -1371,6 +1458,7 @@ void GameState::checkCombatEnd() {
 }
 
 void GameState::restorePlayerSnapshot(std::string& message) {
+    // 战斗中玩家单位可能移动或死亡，结算后统一回到战前站位并满血空蓝。
     clearBoardForSettlement();
     for (const auto& [id, position] : playerCombatSnapshot_) {
         Unit* playerUnit = unit(id);
@@ -1390,6 +1478,7 @@ void GameState::restorePlayerSnapshot(std::string& message) {
 }
 
 void GameState::generateShopOffersFree() {
+    // 随机生成 5 个商店槽位；刷新成本在 refreshShop 中扣除。
     shopOffers_.assign(5, std::nullopt);
     const auto& definitions = unitCatalog();
     if (definitions.empty()) {
@@ -1403,6 +1492,7 @@ void GameState::generateShopOffersFree() {
 }
 
 void GameState::recomputePrepSynergiesAndStats() {
+    // 准备/结算/结束阶段可以即时刷新羁绊；战斗中羁绊保持开战时快照。
     if (phase_ == GamePhase::Prep || phase_ == GamePhase::Resolve || phase_ == GamePhase::GameOver) {
         activeSynergies_ = computeSynergiesFromBoard();
         recomputeAllPlayerEffectiveStats();
@@ -1410,7 +1500,8 @@ void GameState::recomputePrepSynergiesAndStats() {
 }
 
 std::vector<SynergyStatus> GameState::computeSynergiesFromBoard() const {
-    std::unordered_map<std::string, std::set<std::string>> contributors;
+    std::unordered_map<std::string, int> contributors;
+    // 羁绊按场上的单位实例计数；二星单位仍是一个单位，但同名单位重复上场会分别贡献。
     for (int row = 0; row < board_.rows(); ++row) {
         for (int col = 0; col < board_.cols(); ++col) {
             const auto occupant = board_.occupant(Position{row, col});
@@ -1422,7 +1513,7 @@ std::vector<SynergyStatus> GameState::computeSynergiesFromBoard() const {
                 continue;
             }
             for (const std::string& trait : boardUnit->traits()) {
-                contributors[trait].insert(boardUnit->definitionId());
+                ++contributors[trait];
             }
         }
     }
@@ -1431,7 +1522,8 @@ std::vector<SynergyStatus> GameState::computeSynergiesFromBoard() const {
                           std::array<int, 2> thresholds,
                           std::string lowEffect,
                           std::string highEffect) {
-        const int count = static_cast<int>(contributors[trait].size());
+        // 每个羁绊有低/高两档阈值，未激活时记录 nextThreshold 供 GUI 展示。
+        const int count = contributors[trait];
         SynergyStatus status;
         status.trait = std::move(trait);
         status.count = count;
@@ -1459,7 +1551,7 @@ std::vector<SynergyStatus> GameState::computeSynergiesFromBoard() const {
     result.push_back(makeStatus("nut", {2, 4}, "坚果最大生命 +200", "坚果最大生命 +450"));
     result.push_back(makeStatus("sun", {2, 3}, "胜利结算阳光 +1", "胜利结算阳光 +2"));
     result.push_back(makeStatus("healer", {2, 2}, "治疗效果 +25%", "治疗效果 +25%"));
-    result.push_back(makeStatus("fungus", {2, 4}, "真菌最大法力 -10", "真菌最大法力 -25"));
+    result.push_back(makeStatus("fungus", {2, 4}, "真菌技能消耗 -10", "真菌技能消耗 -25"));
     result.push_back(makeStatus("spike", {2, 2}, "地刺攻击力 +15", "地刺攻击力 +15"));
     return result;
 }
@@ -1474,6 +1566,7 @@ void GameState::recomputeAllPlayerEffectiveStats() {
 }
 
 void GameState::maybeMergeUnit(UnitId newestId) {
+    // 三个同 definitionId 的一星玩家单位自动合成一个二星单位。
     if (phase_ != GamePhase::Prep) {
         return;
     }
@@ -1501,6 +1594,7 @@ void GameState::maybeMergeUnit(UnitId newestId) {
     std::sort(matches.begin(), matches.end(), [&](UnitId lhs, UnitId rhs) {
         const Unit* left = unit(lhs);
         const Unit* right = unit(rhs);
+        // acquireSeq 越大表示越新，合成时保留最新购买或添加的那个单位。
         return left->acquireSeq() > right->acquireSeq();
     });
 
@@ -1513,6 +1607,7 @@ void GameState::maybeMergeUnit(UnitId newestId) {
             continue;
         }
         returnEquippedItemToInventory(*removed);
+        // 被消耗单位的装备回库存，避免合成吞掉装备实例。
         removeUnitFromPlacement(matches[i]);
         units_.remove(matches[i]);
     }
@@ -1573,11 +1668,13 @@ void GameState::dropVictoryItemIfNeeded() {
     if (definitions.empty()) {
         return;
     }
+    // 掉落按当前波次轮换装备目录，随机性只决定是否掉落。
     const std::size_t index = static_cast<std::size_t>((player_.currentRound() - 1) % static_cast<int>(definitions.size()));
     addItemToInventory(definitions[index].itemDefId);
 }
 
 int GameState::settlementGoldBonusFromSynergies() const {
+    // sun 羁绊只在胜利结算时提供额外金币。
     for (const SynergyStatus& synergy : activeSynergies_) {
         if (synergy.trait == "sun" && synergy.active) {
             return synergy.activeThreshold >= 3 ? 2 : 1;
@@ -1596,6 +1693,7 @@ bool GameState::ownerHasActiveSynergy(Owner owner, const std::string& trait) con
 }
 
 void GameState::rebuildOccupancyFromUnitPlacements() {
+    // 读档后以 Unit::placement 为真相重建 Board/Bench 占用表。
     for (int row = 0; row < board_.rows(); ++row) {
         for (int col = 0; col < board_.cols(); ++col) {
             board_.clear(Position{row, col});
@@ -1620,6 +1718,7 @@ void GameState::rebuildOccupancyFromUnitPlacements() {
 }
 
 void GameState::clearRuntimeOnlyState() {
+    // 冷却、当前敌人列表等只服务战斗运行，不应跨读档或阶段残留。
     runtime_.clear();
     currentEnemyUnits_.clear();
     if (phase_ != GamePhase::Resolve) {
@@ -1629,6 +1728,7 @@ void GameState::clearRuntimeOnlyState() {
 
 std::vector<UnitId> GameState::activeUnitsForOwner(Owner owner) const {
     std::vector<UnitId> result;
+    // 只扫描棋盘，不扫描 Bench；Bench 单位不参与战斗。
     for (int row = 0; row < board_.rows(); ++row) {
         for (int col = 0; col < board_.cols(); ++col) {
             const Position position{row, col};

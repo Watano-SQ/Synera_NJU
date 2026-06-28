@@ -12,6 +12,7 @@ namespace synera {
 namespace {
 
 bool isSpawnCellAvailable(const GameState& state, Position position, bool ignoreExistingEnemies) {
+    // 生成器只允许把敌人放在敌方半场。
     if (!state.board().isEnemyHalf(position)) {
         return false;
     }
@@ -33,6 +34,7 @@ std::vector<Position> deterministicEnemyCells(const GameState& state, bool ignor
     for (int row = 0; row < enemyRows; ++row) {
         std::vector<int> cols;
         cols.reserve(static_cast<std::size_t>(state.board().cols()));
+        // 每行从中心列向左右扩散，确保同一回合的站位稳定且偏中间。
         for (int offset = 0; offset < state.board().cols(); ++offset) {
             const int left = center - offset;
             const int right = center + offset;
@@ -103,7 +105,16 @@ EnemyTemplate jackboxTemplate() {
                          "BasicUnit"};
 }
 
+EnemyTemplate bossFootballTemplate() {
+    return EnemyTemplate{"巨型橄榄球僵尸",
+                         UnitStats{900, 55, 1, 70, 40, 20},
+                         {"zombie", "elite", "boss"},
+                         "enemies/football_zombie",
+                         "BasicUnit"};
+}
+
 std::unique_ptr<Unit> makeEnemy(const EnemyTemplate& enemyTemplate, int round) {
+    // 敌人随回合线性成长，让后续波次在不增加模板数量时也更强。
     const int scalingRounds = std::max(0, round - 1);
     UnitStats stats = enemyTemplate.stats;
     stats.maxHp += scalingRounds * 25;
@@ -122,6 +133,7 @@ std::unique_ptr<Unit> makeEnemy(const EnemyTemplate& enemyTemplate, int round) {
 }  // namespace
 
 std::vector<EnemyTemplate> EncounterGenerator::templatesForRound(int round) {
+    // 回合数向下限 1 钳制，避免外部传 0 或负数导致空波次。
     const int clampedRound = std::max(1, round);
     if (clampedRound == 1) {
         return {zombieTemplate()};
@@ -134,6 +146,9 @@ std::vector<EnemyTemplate> EncounterGenerator::templatesForRound(int round) {
     }
     if (clampedRound == 4) {
         return {newspaperTemplate(), coneheadTemplate(), screenDoorTemplate()};
+    }
+    if (clampedRound == 5) {
+        return {bossFootballTemplate(), screenDoorTemplate(), jackboxTemplate()};
     }
     return {footballTemplate(), jackboxTemplate(), screenDoorTemplate()};
 }
@@ -149,6 +164,7 @@ std::vector<EnemySpawnPlan> EncounterGenerator::plan(const GameState& state,
 
     std::vector<EnemySpawnPlan> result;
     result.reserve(static_cast<std::size_t>(spawnCount));
+    // plan 阶段只构造计划，generate 阶段才会真正写入棋盘和 UnitManager。
     for (int i = 0; i < spawnCount; ++i) {
         result.push_back(EnemySpawnPlan{cells[static_cast<std::size_t>(i)],
                                         makeEnemy(templates[static_cast<std::size_t>(i)], clampedRound)});
