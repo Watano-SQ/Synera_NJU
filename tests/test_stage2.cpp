@@ -56,6 +56,16 @@ void deployOne(GameState& game, Position position, std::unique_ptr<Unit> unit = 
     assert(game.deployFromBench(0, position));
 }
 
+void setUnitStats(GameState& game, UnitId id, UnitStats stats, int hp = -1) {
+    Unit* target = game.unit(id);
+    assert(target != nullptr);
+    target->setBaseStats(stats);
+    target->setEffectiveStats(stats);
+    if (hp >= 0) {
+        target->setHp(hp);
+    }
+}
+
 void tickUntilResolve(GameState& game, int maxTicks = 240) {
     for (int tick = 0; tick < maxTicks && game.phase() == GamePhase::Combat; ++tick) {
         assert(game.tickCombat().success);
@@ -207,7 +217,7 @@ void testBasicUnitDoesNotCastWhenManaIsFull() {
     assert(game.unit(player)->state() == UnitState::Attacking);
 }
 
-void testTargetTieBreakPrefersLowerColumnWhenHpTied() {
+void testThreatTargetingTieBreakPrefersLowerColumnWhenThreatsMatch() {
     GameState game(8, 8, 8, fastConfig());
     game.player().setCurrentRound(3);
     game.addUnitToBench(basicPlayer("Tie Breaker", 500, 1, 10));
@@ -230,13 +240,102 @@ void testTargetTieBreakPrefersLowerColumnWhenHpTied() {
     assert(centerEnemy != 0 && leftEnemy != 0 && rightEnemy != 0);
 
     game.unit(centerEnemy)->setHp(0);
-    game.unit(rightEnemy)->setHp(game.unit(leftEnemy)->hp());
+    const UnitStats equalThreat{240, 10, 1, 60, 60, 20, 0, 0, 0, 0};
+    setUnitStats(game, leftEnemy, equalThreat);
+    setUnitStats(game, rightEnemy, equalThreat);
     const int leftHp = game.unit(leftEnemy)->hp();
     const int rightHp = game.unit(rightEnemy)->hp();
 
     assert(game.tickCombat().success);
     assert(game.unit(leftEnemy)->hp() == leftHp - 1);
     assert(game.unit(rightEnemy)->hp() == rightHp);
+}
+
+void testThreatTargetingPrefersDangerousEnemyOverCloserWeakEnemy() {
+    GameState game(8, 8, 8, fastConfig());
+    game.player().setCurrentRound(3);
+    game.addUnitToBench(basicPlayer("Threat Reader", 500, 5, 10));
+    assert(game.deployFromBench(0, Position{7, 0}));
+    assert(game.startCombat().success);
+
+    UnitId centerEnemy = 0;
+    UnitId nearWeakEnemy = 0;
+    UnitId farDangerEnemy = 0;
+    for (UnitId id : game.currentEnemyUnits()) {
+        const Position position = *game.unit(id)->placement().boardCell;
+        if (position.col == 4) {
+            centerEnemy = id;
+        } else if (position.col == 3) {
+            nearWeakEnemy = id;
+        } else if (position.col == 5) {
+            farDangerEnemy = id;
+        }
+    }
+    assert(centerEnemy != 0 && nearWeakEnemy != 0 && farDangerEnemy != 0);
+
+    game.unit(centerEnemy)->setHp(0);
+    setUnitStats(game, nearWeakEnemy, UnitStats{260, 1, 1, 60, 80, 20, 0, 0, 0, 0});
+    setUnitStats(game, farDangerEnemy, UnitStats{260, 20, 3, 60, 20, 20, 0, 0, 0, 0});
+    const int nearHp = game.unit(nearWeakEnemy)->hp();
+    const int farHp = game.unit(farDangerEnemy)->hp();
+
+    assert(game.tickCombat().success);
+    assert(game.unit(farDangerEnemy)->hp() == farHp - 5);
+    assert(game.unit(nearWeakEnemy)->hp() == nearHp);
+}
+
+void testThreatTargetingPrefersReadyActiveSkillUnit() {
+    GameState game(8, 8, 8, fastConfig());
+    game.player().setUnitCap(2);
+    const UnitId emptyManaCaster = game.addUnitToBench(peaBurstPlayer(10, 1));
+    assert(game.deployFromBench(0, Position{7, 3}));
+    const UnitId readyCaster = game.addUnitToBench(peaBurstPlayer(10, 1));
+    assert(game.deployFromBench(0, Position{7, 5}));
+    assert(game.startCombat().success);
+
+    const UnitId enemy = game.currentEnemyUnits().front();
+    setUnitStats(game, enemy, UnitStats{500, 1, 10, 60, 1, 20, 0, 0, 0, 0});
+    game.unit(emptyManaCaster)->setMana(0);
+    game.unit(readyCaster)->setMana(game.unit(readyCaster)->skillManaCost());
+    const int emptyManaHp = game.unit(emptyManaCaster)->hp();
+    const int readyHp = game.unit(readyCaster)->hp();
+
+    assert(game.tickCombat().success);
+    assert(game.unit(readyCaster)->hp() == readyHp - 1);
+    assert(game.unit(emptyManaCaster)->hp() == emptyManaHp);
+}
+
+void testThreatTargetingFinishesLowHpTargetWhenThreatsAreClose() {
+    GameState game(8, 8, 8, fastConfig());
+    game.player().setCurrentRound(3);
+    game.addUnitToBench(basicPlayer("Finisher", 500, 10, 10));
+    assert(game.deployFromBench(0, Position{7, 4}));
+    assert(game.startCombat().success);
+
+    UnitId centerEnemy = 0;
+    UnitId leftEnemy = 0;
+    UnitId rightEnemy = 0;
+    for (UnitId id : game.currentEnemyUnits()) {
+        const Position position = *game.unit(id)->placement().boardCell;
+        if (position.col == 4) {
+            centerEnemy = id;
+        } else if (position.col == 3) {
+            leftEnemy = id;
+        } else if (position.col == 5) {
+            rightEnemy = id;
+        }
+    }
+    assert(centerEnemy != 0 && leftEnemy != 0 && rightEnemy != 0);
+
+    game.unit(centerEnemy)->setHp(0);
+    const UnitStats equalThreat{240, 10, 1, 60, 60, 20, 0, 0, 0, 0};
+    setUnitStats(game, leftEnemy, equalThreat, 200);
+    setUnitStats(game, rightEnemy, equalThreat, 10);
+    const int leftHp = game.unit(leftEnemy)->hp();
+
+    assert(game.tickCombat().success);
+    assert(!game.unit(rightEnemy)->isAlive());
+    assert(game.unit(leftEnemy)->hp() == leftHp);
 }
 
 void testMoveConflictLetsOneUnitAdvanceDeterministically() {
@@ -356,7 +455,10 @@ int main() {
     testNaturalManaSkillCostAndCooldown();
     testNaturalManaRegeneratesWithoutAttacking();
     testBasicUnitDoesNotCastWhenManaIsFull();
-    testTargetTieBreakPrefersLowerColumnWhenHpTied();
+    testThreatTargetingTieBreakPrefersLowerColumnWhenThreatsMatch();
+    testThreatTargetingPrefersDangerousEnemyOverCloserWeakEnemy();
+    testThreatTargetingPrefersReadyActiveSkillUnit();
+    testThreatTargetingFinishesLowHpTargetWhenThreatsAreClose();
     testMoveConflictLetsOneUnitAdvanceDeterministically();
     testOpposingUnitsContestingMiddleCellDoNotDeadlock();
     testResolveRestoresPlayersAndBench();

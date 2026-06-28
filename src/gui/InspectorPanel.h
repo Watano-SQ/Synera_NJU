@@ -17,15 +17,19 @@ class InspectorPanel : public QWidget {
 public:
     explicit InspectorPanel(const GameState* game, AssetManager* assets, QWidget* parent = nullptr);
 
+    // 选择变化后只记录 UnitId；具体文本、贴图和数值在 refreshFromState 中重新读取。
     void setSelectedUnit(std::optional<UnitId> unitId);
     void refreshFromState();
 
 private:
+    // traitsText/itemText 把规则层的稳定 id 翻译成面板上适合阅读的文本。
     QString traitsText(const Unit& unit) const;
     QString itemText(const Unit& unit) const;
 
+    // Inspector 只借用 GameState/AssetManager，不修改任何游戏规则状态。
     const GameState* game_;
     AssetManager* assets_;
+    // 没有选中单位时，面板显示空态；选中的 id 如果已被合成/删除，刷新时也会安全处理。
     std::optional<UnitId> selectedUnit_;
     InspectorIconWidget* unitIcon_;
     InspectorIconWidget* itemIcon_;

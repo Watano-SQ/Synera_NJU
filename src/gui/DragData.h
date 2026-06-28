@@ -17,9 +17,13 @@ enum class DragSourceType : qint32 {
 
 // 一次单位拖拽携带的最小信息：单位 ID、来源类型和原位置。
 struct UnitDragData {
+    // unitId 是拖拽的核心身份。落点控件不会信任可视元素本身，而是回到 GameState 再查一次单位。
     UnitId unitId = 0;
+    // sourceType 决定落点动作：Bench -> Board 是部署，Board -> Board 是移动/交换，Board -> Bench 是撤回。
     DragSourceType sourceType = DragSourceType::Bench;
+    // 当 sourceType == Bench 时使用；其它来源保留 -1 作为无效值，便于做防御性检查。
     int benchSlot = -1;
+    // 当 sourceType == Board 时使用；Bench 来源保留 (-1, -1)，避免误把旧坐标当作真实来源。
     Position boardPosition{-1, -1};
 };
 

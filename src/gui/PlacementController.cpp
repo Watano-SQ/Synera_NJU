@@ -19,6 +19,7 @@ PlacementResult PlacementController::dropOnBoard(const UnitDragData& dragData, P
         return reject("Only player units can move during Prep");
     }
     if (!game_->board().isInside(target)) {
+        // Qt 坐标换算可能因为边框、缩放或拖出控件而得到无效格子，先在这里挡掉。
         return reject();
     }
 
@@ -32,6 +33,7 @@ PlacementResult PlacementController::dropOnBoard(const UnitDragData& dragData, P
         }
         const bool ok = game_->deployFromBench(static_cast<std::size_t>(dragData.benchSlot), target,
                                                PlacementPolicy::Reject);
+        // 半场、人口、目标空位等规则全部由 GameState 判断；GUI 不复制这些规则，避免两边漂移。
         return {ok, ok ? "Unit deployed" : "Invalid placement"};
     }
 
@@ -47,6 +49,7 @@ PlacementResult PlacementController::dropOnBoard(const UnitDragData& dragData, P
     }
 
     const bool ok = game_->moveBoardUnit(dragData.boardPosition, target, policy);
+    // moveBoardUnit 会再次验证来源格、目标格和交换策略；这里根据策略只负责给用户更友好的文案。
     return {ok, ok ? (policy == PlacementPolicy::Swap ? "Units swapped" : "Unit moved") : "Invalid placement"};
 }
 
@@ -56,6 +59,7 @@ PlacementResult PlacementController::dropOnBench(const UnitDragData& dragData, i
         return reject("Only player units can move during Prep");
     }
     if (!game_->bench().isValidSlot(static_cast<std::size_t>(targetSlot)) || targetSlot < 0) {
+        // 先检查 targetSlot < 0 再语义上更直观，但这里的 isValidSlot 也能挡住转换后的非法值。
         return reject();
     }
     if (!game_->bench().isEmpty(static_cast<std::size_t>(targetSlot))) {
@@ -66,6 +70,7 @@ PlacementResult PlacementController::dropOnBench(const UnitDragData& dragData, i
     }
 
     const bool ok = game_->returnToBench(dragData.boardPosition, static_cast<std::size_t>(targetSlot));
+    // returnToBench 内部会清棋盘、写 Bench、更新 Unit::placement，并刷新准备阶段属性。
     return {ok, ok ? "Unit returned to bench" : "Invalid placement"};
 }
 

@@ -15,7 +15,9 @@ using ItemId = std::uint64_t;
 
 // 单位归属。很多规则都依赖归属判断，例如半场限制、目标选择和羁绊加成。
 enum class Owner {
+    // 玩家可购买、部署、装备和参与羁绊统计的单位。
     PlayerCtrl,
+    // 由 EncounterGenerator 生成，只在战斗与结算过程中短暂存在的敌方单位。
     EnemyCtrl
 };
 
@@ -30,9 +32,13 @@ enum class UnitState {
 
 // 游戏主状态机。大多数会改动阵容、商店或装备的命令只允许在 Prep 阶段执行。
 enum class GamePhase {
+    // 准备阶段允许经济、商店、装备、部署和存读档操作。
     Prep,
+    // 战斗阶段只允许 tickCombat 推进，禁止玩家再改阵容。
     Combat,
+    // 结算阶段根据胜负发放奖励、扣血、恢复玩家阵容。
     Resolve,
+    // 游戏结束后保留最终状态供 GUI 展示，不再继续推进回合。
     GameOver
 };
 
@@ -100,6 +106,8 @@ struct ActionResult {
 
 // 单位的基础战斗属性。间隔越小，攻击或移动越快。
 struct UnitStats {
+    // 这些数值是“规则层单位”的完整战斗参数，GUI 不应自己推导或缓存另一套副本。
+    // 装备、星级和羁绊会从 baseStats 计算出 effectiveStats，再由 Unit 的访问器统一读取。
     int maxHp = 1;
     int atk = 1;
     int range = 1;
@@ -114,11 +122,13 @@ struct UnitStats {
 
 // 可购买单位的静态定义。definitionId/factoryKey/visualKey 是稳定逻辑键。
 struct UnitDefinition {
+    // definitionId 用于商店、存档和三合一判断，必须比显示名更稳定。
     std::string definitionId;
     std::string name;
     int cost = 1;
     std::vector<std::string> traits;
     UnitStats baseStats;
+    // factoryKey 决定实例化哪一种 Unit 派生类，visualKey 决定 GUI 贴图资源。
     std::string factoryKey;
     std::string visualKey;
     std::string star1VisualKey;
@@ -172,7 +182,9 @@ struct CombatConfig {
     int defeatGold = 2;
     int defeatHpLoss = 10;
     int maxRound = 5;
-    int itemDropPercent = 35;
+    // 验收演示时希望每次胜利都能讲到装备系统，所以默认胜利掉落率设为 100%。
+    // 需要测试“无掉落”路径时，可以像 stage3 测试那样单独把它改成 0。
+    int itemDropPercent = 100;
 };
 
 // Unit 的单一位置来源。修改位置时必须同步 Board/Bench 的占用表。
@@ -181,11 +193,13 @@ struct Placement {
     std::optional<std::size_t> benchSlot;
     std::optional<Position> boardCell;
 
+    // 以下工厂函数保证 kind 与附带坐标/槽位一起设置，减少手写 Placement 时的半初始化状态。
     static Placement none() {
         return {};
     }
 
     static Placement bench(std::size_t slot) {
+        // BenchSlot 只使用 benchSlot 字段；boardCell 保持空值，用来表示互斥的当前位置来源。
         Placement placement;
         placement.kind = PlacementKind::BenchSlot;
         placement.benchSlot = slot;
@@ -193,6 +207,7 @@ struct Placement {
     }
 
     static Placement board(Position position) {
+        // BoardCell 只使用 boardCell 字段。Board 的占用表和 Unit::placement 必须由 GameState 同步维护。
         Placement placement;
         placement.kind = PlacementKind::BoardCell;
         placement.boardCell = position;
@@ -200,6 +215,8 @@ struct Placement {
     }
 };
 
+// toString 系列函数主要服务三类场景：控制台演示、存档文本格式和调试面板。
+// 因此返回值应保持稳定、简短，并尽量避免依赖本地化显示文本。
 std::string toString(Owner owner);
 std::string toString(UnitState state);
 std::string toString(GamePhase phase);

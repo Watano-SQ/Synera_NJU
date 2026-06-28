@@ -39,6 +39,8 @@ public:
     const std::string& definitionId() const;
     const std::string& visualKey() const;
     const std::string& factoryKey() const;
+    // 下面这些访问器把“基础数值”和“计算后数值”统一封装起来。
+    // 外部战斗代码读取 hp/atk/range 等当前有效值即可，不需要知道星级、装备和羁绊如何叠加。
     Owner owner() const;
     const std::vector<std::string>& traits() const;
     int star() const;
@@ -63,14 +65,17 @@ public:
     const Placement& placement() const;
 
     bool isAlive() const;
+    // setHp/setMana 会在实现中做范围裁剪，保证生命和法力不会越过 0 或对应上限。
     void setHp(int hp);
     void setMana(int mana);
+    // acquireSeq 用来在三合一时确定“最新获得”的单位，避免同名单位合成时结果随机。
     void setStar(int star);
     void setAcquireSeq(std::uint64_t acquireSeq);
     void setBaseStats(UnitStats stats);
     void setEffectiveStats(UnitStats stats);
     void setEquippedItemId(std::optional<ItemId> itemId);
     void setState(UnitState state);
+    // Unit 只记录自己认为的位置；Board/Bench 的占用表必须由 GameState 同步更新。
     void setPlacement(Placement placement);
 
     // archetype 用于展示和存档调试，castSkill 由战斗循环在法力满时调用。
@@ -92,7 +97,9 @@ private:
     UnitStats baseStats_;
     UnitStats effectiveStats_;
     std::optional<ItemId> equippedItemId_;
+    // traits 存放稳定的 traitId，例如 shooter/sun/healer；GUI 展示名由目录定义决定。
     std::vector<std::string> traits_;
+    // state_ 既给规则层判断死亡/施法，也给 GUI 画不同状态提示。
     UnitState state_ = UnitState::Idle;
     Placement placement_ = Placement::none();
 };

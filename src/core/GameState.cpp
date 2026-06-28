@@ -66,6 +66,35 @@ int adjustedSkillManaCost(int value, int delta) {
     return std::max(10, value + delta);
 }
 
+int targetBaseThreat(const Unit& target) {
+    // 基础威胁由“能打多疼、能打多远、出手多快、身体有多厚”组成，保持整数权重便于验收讲解。
+    return target.atk() * 10 + target.range() * 8 + std::max(0, 80 - target.attackInterval()) +
+           target.maxHp() / 25;
+}
+
+int targetSkillThreat(const Unit& target, int runtimeSkillCooldown) {
+    if (!target.hasActiveSkill() || target.skillManaCost() <= 0) {
+        return 0;
+    }
+
+    int score = 15;
+    if (target.mana() >= target.skillManaCost() && runtimeSkillCooldown == 0) {
+        return score + 45;
+    }
+    score += std::min(30, target.mana() * 30 / target.skillManaCost());
+    return score;
+}
+
+int executeValue(const Unit& attacker, const Unit& target) {
+    if (target.hp() <= attacker.atk()) {
+        return 35;
+    }
+    if (target.hp() <= attacker.atk() * 2) {
+        return 15;
+    }
+    return 0;
+}
+
 std::string placementKindToken(PlacementKind kind) {
     switch (kind) {
         case PlacementKind::None:
@@ -1223,6 +1252,8 @@ std::optional<UnitId> GameState::selectTarget(UnitId attackerId) const {
     const std::vector<UnitId> candidates = targetOwner == Owner::PlayerCtrl ? activePlayerUnits() : activeEnemyUnits();
 
     std::optional<UnitId> bestId;
+    int bestScore = 0;
+    int bestBaseThreat = 0;
     int bestDistSq = 0;
     int bestHp = 0;
     Position bestPosition;
@@ -1233,20 +1264,31 @@ std::optional<UnitId> GameState::selectTarget(UnitId attackerId) const {
             continue;
         }
 
-        // 目标优先级：距离最近，其次血量更高，再按位置和 ID 保持确定性。
         const int distSq = distanceSquared(*attackerPosition, *candidatePosition);
-        const bool better = !bestId.has_value() || distSq < bestDistSq ||
-                            (distSq == bestDistSq && candidate->hp() > bestHp) ||
-                            (distSq == bestDistSq && candidate->hp() == bestHp &&
-                             candidatePosition->col < bestPosition.col) ||
-                            (distSq == bestDistSq && candidate->hp() == bestHp &&
-                             candidatePosition->col == bestPosition.col &&
+        const int baseThreat = targetBaseThreat(*candidate);
+        const auto runtimeIt = runtime_.find(candidateId);
+        const int candidateSkillCooldown = runtimeIt == runtime_.end() ? 0 : runtimeIt->second.skillCooldown;
+        const int score = baseThreat + targetSkillThreat(*candidate, candidateSkillCooldown) +
+                          executeValue(*attacker, *candidate) - distSq * 3;
+        // 索敌从单纯“最近优先”改成“威胁分 + 距离惩罚”：
+        // 先打输出高、技能快好、可斩杀的目标；分数相同时再用距离、血量、位置和 ID 保持确定性。
+        const bool better = !bestId.has_value() || score > bestScore ||
+                            (score == bestScore && baseThreat > bestBaseThreat) ||
+                            (score == bestScore && baseThreat == bestBaseThreat && distSq < bestDistSq) ||
+                            (score == bestScore && baseThreat == bestBaseThreat && distSq == bestDistSq &&
+                             candidate->hp() < bestHp) ||
+                            (score == bestScore && baseThreat == bestBaseThreat && distSq == bestDistSq &&
+                             candidate->hp() == bestHp && candidatePosition->col < bestPosition.col) ||
+                            (score == bestScore && baseThreat == bestBaseThreat && distSq == bestDistSq &&
+                             candidate->hp() == bestHp && candidatePosition->col == bestPosition.col &&
                              candidatePosition->row > bestPosition.row) ||
-                            (distSq == bestDistSq && candidate->hp() == bestHp &&
-                             candidatePosition->col == bestPosition.col &&
+                            (score == bestScore && baseThreat == bestBaseThreat && distSq == bestDistSq &&
+                             candidate->hp() == bestHp && candidatePosition->col == bestPosition.col &&
                              candidatePosition->row == bestPosition.row && candidateId < *bestId);
         if (better) {
             bestId = candidateId;
+            bestScore = score;
+            bestBaseThreat = baseThreat;
             bestDistSq = distSq;
             bestHp = candidate->hp();
             bestPosition = *candidatePosition;
